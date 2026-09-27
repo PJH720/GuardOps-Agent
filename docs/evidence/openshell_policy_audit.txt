@@ -17,7 +17,9 @@ skill: skills/generate-sandbox-policy/SKILL.md (official NVIDIA/OpenShell, Apach
    - (nvidia_inference) integrate.api.nvidia.com: L4-only — all methods and paths allowed; prefer `protocol: rest`
 VERDICT: FAIL (4 blocking)
 
-##### 2) AFTER — policy/openshell-policy.yaml fixed (L7 rules on the credentialed NVIDIA endpoint, key==name, cve.mitre.org added so both layers agree)
+##### 2) AFTER — committed policy/openshell-policy.yaml (L7 rules on the credentialed NVIDIA endpoint, key==name,
+#####    cve.mitre.org added so both layers agree; binaries = /usr/bin/python3.12 after the OpenShell run showed
+#####    that OpenShell matches the resolved interpreter, not the /usr/bin/python3 symlink)
 skill: skills/generate-sandbox-policy/SKILL.md (official NVIDIA/OpenShell, Apache-2.0)
 === deterministic audit of openshell-policy.yaml ===
 [hard_error] 0
@@ -28,6 +30,7 @@ skill: skills/generate-sandbox-policy/SKILL.md (official NVIDIA/OpenShell, Apach
 VERDICT: PASS
 
 ##### 3) LLM review — Nemotron 3 Super via build.nvidia.com, official SKILL.md injected as system context (--llm)
+# (reviewed the policy before the binary path changed /usr/bin/python3 -> /usr/bin/python3.12; no other difference)
 # Note: the model marked 'credentialed destinations covered by provider profile' PASS on an assumption; the provider
 #       profile (run_in_openshell.sh: --provider nvidia-build) is outside the policy file and is verified at runtime.
 **검증 체크리스트 (Step 6: Validate and Warn 기준)**  

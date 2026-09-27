@@ -23,3 +23,4 @@ echo; echo "[P4] python3 POST https://integrate.api.nvidia.com/v1/embeddings (L7
 echo; echo "[P5] python3 GET https://nvd.nist.gov/search?q=SECRET (L7 path not allowed)   expect: DENIED"; py GET "https://nvd.nist.gov/search?q=SECRET_DATA"
 echo; echo "[P6] Landlock: write /etc/guardops_probe (read-only)                         expect: denied"; (touch /etc/guardops_probe && echo "WROTE (unexpected)") 2>&1 | tail -1
 echo; echo "[P7] Landlock: write /sandbox/guardops_probe (read-write)                    expect: ok"; (touch /sandbox/guardops_probe && echo "ok: write permitted") 2>&1 | tail -1
+echo; echo "[P8] syscall filter: unshare --user (new user namespace)                 expect: denied"; (unshare --user --map-root-user true && echo "UNSHARE SUCCEEDED (not filtered)") 2>&1 | tail -1

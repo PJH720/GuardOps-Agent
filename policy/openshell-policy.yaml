@@ -1,4 +1,4 @@
-# OpenShell 샌드박스 정책 (커널 레이어: Landlock + seccomp + netns/OPA L7 proxy)
+# OpenShell 샌드박스 정책 (커널 레이어: Landlock 파일시스템 + OPA 바이너리/호스트 + L7 프록시, 샌드박스 syscall 제한)
 # 사용: openshell sandbox create --name guardops --policy policy/openshell-policy.yaml ...
 # 형식: NVIDIA OpenShell 공식 sandbox-policy-quickstart / generate-sandbox-policy 스킬 템플릿.
 # 검증: scripts/audit_openshell_policy.py — 공식 스킬 'Step 6: Validate and Warn' 체크리스트 + 앱 계층과의 교차 검증.

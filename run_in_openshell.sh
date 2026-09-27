@@ -7,8 +7,11 @@
 #      (macOS: Apple Silicon + Docker Desktop 필요. VM 드라이버는 e2fsprogs 필요: brew install e2fsprogs)
 #   2) 로컬 게이트웨이 실행. macOS 에서는 VM 드라이버를 쓴다 — Docker 드라이버는 --network host 를 쓰는데
 #      Docker Desktop 에서는 그 "host" 가 Mac 이 아니라 Docker VM 이라 샌드박스가 게이트웨이에 닿지 못한다.
-#        OPENSHELL_COMPUTE_DRIVER=vm brew services restart openshell   (또는 openshell-gateway 직접 실행)
-#        openshell gateway add https://localhost:17670 --local --name openshell
+#      - Homebrew 설치가 정상인 경우:  OPENSHELL_COMPUTE_DRIVER=vm brew services restart openshell
+#      - 이 저장소에서 실제 검증한 경로(Homebrew 가 Xcode CLT 버전 문제로 막힌 macOS, 수동 설치):
+#          OPENSHELL_COMPUTE_DRIVER=vm ~/.local/openshell/run-gateway.sh &      # Docker Desktop 실행 상태에서
+#          export PATH="$HOME/.local/openshell/bin:$PATH"
+#      - 최초 1회: openshell gateway add https://localhost:17670 --local --name openshell
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -24,7 +27,8 @@ docker build -q -t "$IMAGE" sandbox >/dev/null
 git archive HEAD | tar -x -C "$STAGE"
 
 # 3. 커널 계층 정책 사전 감사 (공식 NVIDIA generate-sandbox-policy 스킬 체크리스트)
-python3 scripts/audit_openshell_policy.py >/dev/null && echo "policy audit: PASS"
+if command -v uv >/dev/null; then PY=(uv run -q --with-requirements requirements.txt python); else PY=(python3); fi
+"${PY[@]}" scripts/audit_openshell_policy.py >/dev/null && echo "policy audit: PASS"
 
 # 4. 샌드박스 생성
 openshell sandbox delete "$NAME" >/dev/null 2>&1 || true

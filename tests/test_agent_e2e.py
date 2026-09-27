@@ -19,7 +19,9 @@ TICKET_ID = re.compile(r"^INC-\d{8}-[0-9A-F]{4}$")
 
 class AgentLoopE2ETest(unittest.TestCase):
     def run_scenario(self, role: str, goal: str) -> tuple[list[dict], Path, str]:
-        tmp = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        tmpdir = tempfile.TemporaryDirectory()  # addCleanup (not enterContext) keeps Python 3.10 support
+        self.addCleanup(tmpdir.cleanup)
+        tmp = Path(tmpdir.name)
         with mock.patch.object(agent, "OUT_DIR", tmp), contextlib.redirect_stdout(io.StringIO()):
             final = agent.run(goal, role, auto_approve=True, mock=True)
         events = [json.loads(line) for line in (tmp / "audit.jsonl").read_text(encoding="utf-8").splitlines()]
