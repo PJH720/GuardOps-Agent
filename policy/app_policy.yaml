@@ -25,11 +25,27 @@ egress_allowlist:
   - nvd.nist.gov
   - cve.mitre.org
 
-# 인자에 이런 값이 들어가면 차단 (비밀정보 유출 시도)
+# 허용 호스트라도 URL 경로/쿼리를 L7 수준으로 제한 (OpenShell L7 rules 와 같은 개념을 앱 계층에 적용).
+# 쿼리 문자열/경로에 데이터를 실어 허용 도메인으로 유출하는 우회(예: ?q=SECRET)를 차단한다.
+egress_url_rules:
+  nvd.nist.gov:
+    path: "^/vuln/detail/CVE-\\d{4}-\\d{4,7}$"
+    query: {}                                  # 쿼리 파라미터 불허
+  cve.mitre.org:
+    path: "^/cgi-bin/cvename\\.cgi$"
+    query: {name: "^CVE-\\d{4}-\\d{4,7}$"}       # name=CVE-... 만 허용
+
+# 인자(fetch_url 은 퍼센트 디코딩된 전체 URL)에 이런 값이 들어가면 차단 (비밀정보 유출 시도)
 blocked_patterns:
   - "nvapi-[A-Za-z0-9_-]{8,}"
   - "(?i)password\\s*[:=]"
   - "BEGIN (RSA|OPENSSH) PRIVATE KEY"
+  - "AKIA[0-9A-Z]{16}"                                     # AWS access key id
+
+# 외부로 나가는 URL(fetch_url) 에만 추가 적용 — 티켓 본문의 IOC 해시(SHA-256 등) 오탐 방지
+egress_secret_patterns:
+  - "(?i)(secret|token|api[_-]?key|passwd|credential)s?\\s*[:=]"
+  - "[A-Za-z0-9+/_-]{32,}={0,2}"                          # 고엔트로피 토큰(base64/hex 32자 이상)
 
 # 데모용 ACL
 acl:
