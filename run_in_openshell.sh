@@ -1,15 +1,42 @@
 #!/usr/bin/env bash
-# GuardOps-Agent 를 OpenShell 샌드박스 안에서 실행 (커널 레벨 2차 방어 시연용)
-# 사전: OpenShell 설치  curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh
-#       Docker 실행 중, export NVIDIA_API_KEY=nvapi-...
-# 주의: OpenShell 버전에 따라 플래그가 다를 수 있음 → `openshell sandbox create --help` 로 확인
+# GuardOps-Agent 를 NVIDIA OpenShell 샌드박스(커널 계층 방어) 안에서 실행하고 DENY 증거를 수집한다.
+# 2026-09-28 OpenShell 0.1.1 로 실제 검증된 절차 (증거: docs/evidence/openshell_kernel_deny.txt).
+#
+# 사전 준비
+#   1) OpenShell 설치: curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh
+#      (macOS: Apple Silicon + Docker Desktop 필요. VM 드라이버는 e2fsprogs 필요: brew install e2fsprogs)
+#   2) 로컬 게이트웨이 실행. macOS 에서는 VM 드라이버를 쓴다 — Docker 드라이버는 --network host 를 쓰는데
+#      Docker Desktop 에서는 그 "host" 가 Mac 이 아니라 Docker VM 이라 샌드박스가 게이트웨이에 닿지 못한다.
+#        OPENSHELL_COMPUTE_DRIVER=vm brew services restart openshell   (또는 openshell-gateway 직접 실행)
+#        openshell gateway add https://localhost:17670 --local --name openshell
 set -euo pipefail
 cd "$(dirname "$0")"
-openshell provider create --name nvidia-build --type nvidia --credential NVIDIA_API_KEY || true
-openshell sandbox create --name guardops \
-  --policy policy/openshell-policy.yaml \
-  --provider nvidia-build \
-  --upload .:/sandbox/guardops
-echo "샌드박스 접속:   openshell sandbox connect guardops"
-echo "샌드박스 안에서: cd /sandbox/guardops && pip install -r requirements.txt && python3 agent.py --auto-approve"
-echo "차단 로그 확인:  openshell logs guardops --since 5m --source sandbox   # attacker.example DENIED 확인"
+
+NAME="${SANDBOX_NAME:-guardops}"
+IMAGE="guardops-sandbox:0.1"
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+
+# 1. 샌드박스 이미지: NVIDIA base + /usr/bin/python3.12 (정책이 허용하는 유일한 바이너리) + 에이전트 의존성
+docker build -q -t "$IMAGE" sandbox >/dev/null
+
+# 2. 추적되는 파일만 업로드 (.env·ref/ 제외 — git archive 는 커밋된 파일만 포함)
+git archive HEAD | tar -x -C "$STAGE"
+
+# 3. 커널 계층 정책 사전 감사 (공식 NVIDIA generate-sandbox-policy 스킬 체크리스트)
+python3 scripts/audit_openshell_policy.py >/dev/null && echo "policy audit: PASS"
+
+# 4. 샌드박스 생성
+openshell sandbox delete "$NAME" >/dev/null 2>&1 || true
+openshell sandbox create --name "$NAME" --from "$IMAGE" --policy policy/openshell-policy.yaml \
+  --upload "$STAGE/.:/sandbox/guardops" --no-git-ignore --no-auto-providers --no-tty --detach
+
+# 5. 프로브(허용/차단 경로) + 샌드박스 안에서 에이전트 실행
+openshell sandbox exec -n "$NAME" --no-tty --timeout 180 -- bash -s < scripts/openshell_probes.sh
+printf 'cd /sandbox/guardops/* && python3 agent.py --mock --auto-approve\n' \
+  | openshell sandbox exec -n "$NAME" --no-tty --timeout 180 -- bash -s
+
+# 6. 커널 계층 판정 로그 (OCSF): engine:opa = 바이너리+호스트, engine:l7 = 메서드+경로
+openshell logs "$NAME" --since 10m --source sandbox | grep -E '(NET|HTTP):[A-Z]+ .*(ALLOWED|DENIED)'
+
+echo "정리: openshell sandbox delete $NAME"

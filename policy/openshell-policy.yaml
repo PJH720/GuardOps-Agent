@@ -29,7 +29,7 @@ network_policies:
               method: GET
               path: "/v1/models"
     binaries:
-      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.12 }   # OpenShell 은 심볼릭 링크(/usr/bin/python3)가 아닌 실제 실행 파일로 식별
   # CVE 조회: python3 만, GET 으로 CVE 상세 경로만 (앱 계층 egress_url_rules 와 동일한 범위)
   cve-lookup:
     name: cve-lookup
@@ -51,5 +51,5 @@ network_policies:
               method: GET
               path: "/cgi-bin/cvename.cgi"
     binaries:
-      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.12 }   # OpenShell 은 심볼릭 링크(/usr/bin/python3)가 아닌 실제 실행 파일로 식별
 # 그 외 모든 목적지(예: attacker.example)·모든 다른 바이너리(curl 등)는 기본 거부 → openshell logs 에 OCSF DENIED 로 기록
