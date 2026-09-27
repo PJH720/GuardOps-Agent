@@ -1,0 +1,37 @@
+# 애플리케이션(하네스) 레이어 정책 — deny-by-default.
+# OpenShell(커널 레이어) 및 Nemotron 프롬프트 규칙과 함께 '3단 다층 방어'를 구성.
+roles:
+  viewer:              # 조회만
+    tools: [list_skills, load_skill, search_runbook]
+    doc_clearance: [all]
+  hr:                  # 인사팀: 조회 + 인사 대외비 문서 열람
+    tools: [list_skills, load_skill, search_runbook]
+    doc_clearance: [all, hr]
+  eng:                 # 엔지니어링: 조회 + 인프라/개발 문서 열람
+    tools: [list_skills, load_skill, search_runbook, check_permission]
+    doc_clearance: [all, eng]
+  analyst:             # 보안 분석가: 조회 + 권한확인 + 티켓(승인 필요) + 허용 도메인 조회
+    tools: [list_skills, load_skill, search_runbook, check_permission, create_incident_ticket, fetch_url]
+    doc_clearance: [all, eng]
+  admin:
+    tools: [list_skills, load_skill, search_runbook, check_permission, create_incident_ticket, fetch_url]
+    doc_clearance: [all, hr, eng, finance]
+
+# 되돌릴 수 없는 작업 → 사람 승인(Human-in-the-loop)
+require_approval: [create_incident_ticket]
+
+# 외부 통신 허용 목록 (lethal trifecta 의 '외부 통신' 다리 차단)
+egress_allowlist:
+  - nvd.nist.gov
+  - cve.mitre.org
+
+# 인자에 이런 값이 들어가면 차단 (비밀정보 유출 시도)
+blocked_patterns:
+  - "nvapi-[A-Za-z0-9_-]{8,}"
+  - "(?i)password\\s*[:=]"
+  - "BEGIN (RSA|OPENSSH) PRIVATE KEY"
+
+# 데모용 ACL
+acl:
+  kim: [prod-db, staging-db]
+  lee: [staging-db]
