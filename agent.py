@@ -25,6 +25,7 @@ import json
 import os
 import re
 import sys
+import time
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
@@ -50,6 +51,7 @@ MODEL = os.getenv("NV_MODEL", "nvidia/nemotron-3-super-120b-a12b")
 GUARD_MODEL = os.getenv("NV_GUARD_MODEL", "")  # 예: nvidia/llama-3.1-nemoguard-8b-content-safety (선택)
 GUARD_TIMEOUT = int(os.getenv("NV_GUARD_TIMEOUT", "30"))
 MAX_STEPS = int(os.getenv("MAX_STEPS", "8"))
+CHAT_RETRIES = int(os.getenv("NV_CHAT_RETRIES", "2"))
 
 OUT_DIR.mkdir(exist_ok=True)
 SESSION_ID = uuid.uuid4().hex[:8]
@@ -246,11 +248,24 @@ def chat(messages: list[dict], model: str = MODEL, tools: list | None = None, ti
     body = {"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2048}
     if tools:
         body |= {"tools": tools, "tool_choice": "auto"}
-    r = requests.post(f"{BASE_URL}/chat/completions", json=body, timeout=timeout,
-                      headers={"Authorization": f"Bearer {key}", "Accept": "application/json"})
-    if r.status_code >= 400:
-        raise SystemExit(f"API error {r.status_code}: {r.text[:500]}")
-    return r.json()["choices"][0]["message"]
+    headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
+    for attempt in range(1, CHAT_RETRIES + 2):  # 일시적 5xx/타임아웃만 재시도, 4xx 는 즉시 실패
+        try:
+            r = requests.post(f"{BASE_URL}/chat/completions", json=body, timeout=timeout, headers=headers)
+        except requests.Timeout:
+            if attempt > CHAT_RETRIES:
+                raise
+            audit("llm_retry", model=model, attempt=attempt, cause="timeout")
+            time.sleep(2 * attempt)
+            continue
+        if r.status_code >= 500 and attempt <= CHAT_RETRIES:
+            audit("llm_retry", model=model, attempt=attempt, cause=f"http {r.status_code}")
+            time.sleep(2 * attempt)
+            continue
+        if r.status_code >= 400:
+            raise SystemExit(f"API error {r.status_code}: {r.text[:500]}")
+        return r.json()["choices"][0]["message"]
+    raise SystemExit("API retries exhausted")
 
 
 def guard_input(text: str) -> tuple[bool, str]:
@@ -260,7 +275,8 @@ def guard_input(text: str) -> tuple[bool, str]:
     try:
         msg = chat([{"role": "user", "content": text}], model=GUARD_MODEL, timeout=GUARD_TIMEOUT)
         verdict = (msg.get("content") or "").lower()
-        unsafe = '"user safety": "unsafe"' in verdict or verdict.strip().startswith("unsafe")
+        # 모델별 응답 형식 모두 처리: JSON {"User Safety": "unsafe"} / 평문 "User Safety: unsafe" / "unsafe"
+        unsafe = bool(re.search(r'user safety"?\s*:\s*"?unsafe', verdict)) or verdict.strip().startswith("unsafe")
         return (not unsafe), verdict[:300]
     except (SystemExit, requests.RequestException) as e:
         # 가드 엔드포인트 장애가 데모 전체를 막지 않도록 fail-open 하되, guard_error 로 명시 감사 기록한다.
