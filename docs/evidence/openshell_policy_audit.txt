@@ -1,0 +1,72 @@
+# OpenShell sandbox-policy audit — official NVIDIA skill 'generate-sandbox-policy' (NVIDIA/OpenShell, Apache-2.0)
+# Tool: scripts/audit_openshell_policy.py  ·  Checklist: SKILL.md 'Step 6: Validate and Warn' + GuardOps cross-layer check
+# Date: 2026-09-28
+
+##### 1) BEFORE — policy as shipped in the starter kit (commit 2005bab)
+skill: skills/generate-sandbox-policy/SKILL.md (official NVIDIA/OpenShell, Apache-2.0)
+=== deterministic audit of openshell-policy.yaml ===
+[hard_error] 1
+   - (nvidia_inference) integrate.api.nvidia.com: credentialed provider endpoint is uninspected (L4-only or tls: skip)
+[structural] 2
+   - (nvidia_inference) policy key `nvidia_inference` does not match name `nvidia-build-api`
+   - (cve_readonly) policy key `cve_readonly` does not match name `cve-readonly`
+[cross_layer] 1
+   - (-) app egress allowlist host `cve.mitre.org` has no kernel-layer (OpenShell) rule — the two defense layers disagree
+[schema_warning] 0
+[breadth_warning] 1
+   - (nvidia_inference) integrate.api.nvidia.com: L4-only — all methods and paths allowed; prefer `protocol: rest`
+VERDICT: FAIL (4 blocking)
+
+##### 2) AFTER — policy/openshell-policy.yaml fixed (L7 rules on the credentialed NVIDIA endpoint, key==name, cve.mitre.org added so both layers agree)
+skill: skills/generate-sandbox-policy/SKILL.md (official NVIDIA/OpenShell, Apache-2.0)
+=== deterministic audit of openshell-policy.yaml ===
+[hard_error] 0
+[structural] 0
+[cross_layer] 0
+[schema_warning] 0
+[breadth_warning] 0
+VERDICT: PASS
+
+##### 3) LLM review — Nemotron 3 Super via build.nvidia.com, official SKILL.md injected as system context (--llm)
+# Note: the model marked 'credentialed destinations covered by provider profile' PASS on an assumption; the provider
+#       profile (run_in_openshell.sh: --provider nvidia-build) is outside the policy file and is verified at runtime.
+**검증 체크리스트 (Step 6: Validate and Warn 기준)**  
+
+| 검증 항목 | 상태 | 비고 |
+|---|---|---|
+| **Hard Errors** (샌드박스 시작을 막는 오류) |  |  |
+| - `rules`와 `access`가 동시에 존재하지 않음 | PASS | 두 정책 모두 `rules`만 사용 |
+| - L7 `protocol`이 설정되면 `rules` 또는 `access` 중 하나 존재 (`protocol: tcp`일 때는 두 필드 없음) | PASS | `protocol: rest` + `rules` 존재 |
+| - `protocol: tcp` 엔드포인트에 유효한 DNS 호스트명 (IP 리터럴, 트레일링‑닷, 호스트리스 불가) | PASS | `protocol: rest`이므로 해당 사항 없음 |
+| - `tls`는 생략 또는 `skip`만 허용 | PASS | `tls` 필드 생략 (기본값) |
+| - `rules`가 존재할 때 비어 있지 않음 | PASS | 각 규칙에 허용 항목 1개 이상 |
+| - 미들웨어 설정 시 `middleware` 이름과 `endpoints.include` 비어 있지 않음 | PASS | 미들웨어 미사용 |
+| - 미들웨어 `order` 값이 고유하고 선택된 체인이 10단계 초과하지 않음 | PASS | 미들웨어 미사용 |
+| - `fail_closed` 미들웨어가 `tls: skip` 엔드포인트를覆盖하지 않음 | PASS | 미들웨어 미사용, `tls: skip` 없음 |
+| - WebSocket 제어가 필요 시 `WEBSOCKET_MESSAGE/PRE_CREDENTIALS` 광고 여부 및 사용자 이해 | PASS | WebSocket 사용 없음 |
+| - 응답 제어가 필요 시 `HTTP_RESPONSE/PRE_RETURN` 광고 여부 | PASS | 응답 미들웨어 없음 |
+| - credential‑provider가 붙은 엔드포인트가 L4‑only 또는 `tls: skip`이 아닐 때 `allow_uninspected_credentials: true` 불필요 | PASS | L7(`protocol: rest`) 사용, `allow_uninspected_credentials` 미설정 (정상) |
+| **Schema Warnings** (로그‑레벨 경고, 하지만 수정 권장) |  |  |
+| - `tls: skip` + L7 규칙 조합 (포트 443) | PASS | `tls: skip` 없음 |
+| - HTTP 메서드가 표준 (GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS, `*`) | PASS | POST, GET 사용 |
+| - credential‑대상 엔드포인트가 공급자 프로파일에도 선언되어 있는지 | PASS | 공급자 프로파일은 별도 관리, 정책과 충돌 없음 가정 |
+| **Structural Checks** (구조적 필수 요소) |  |  |
+| - 모든 정책에 `name`, `endpoints`, `binaries` 존재 | PASS | 충족 |
+| - 모든 엔드포인트에 `host`와 `port` 존재 | PASS | 충족 |
+| - 모든 바이너리에 `path` 존재 | PASS | 충족 |
+| - 정책 키와 `name` 필드 일치 | PASS | `nvidia-build-api`, `cve-lookup` 일치 |
+| - 미들웨어 선택자당 `include`+`exclude` ≤ 32 패턴 | PASS | 미들웨어 미사용 |
+| **Breadth Warnings** (과도하게 넓은 접근 여부) |  |  |
+| - L4‑only 정책 (프로토콜 생략 또는 `protocol: tcp`) | PASS | L7(`protocol: rest`) 사용 |
+| - `access: full` | PASS | `access` 미사용, 규칙 기반 세부 허용 |
+| - `access: full` + `enforcement: audit` | PASS | 해당 없음 |
+| - `access: read-write` (쓰기 필요 미확인 시) | PASS | 해당 없음 |
+| - 와일드카드 바이너리 (`*` 또는 `**` in 바이너리 경로) | PASS | `/usr/bin/python3` 구체 지정 |
+| - 모든 규칙에 `**` 경로 글로브 사용 | PASS | 구체적 경로(`/v1/chat/completions`, `/v1/models`, `/vuln/detail/*`, `/cgi-bin/cvename.cgi`) 사용 |
+| - 하나의 정책에 여러 광범위한 엔드포인트 | PASS | 각 정책당 1~2개의 특정 호스트만 |
+| - 호스트리스 `allowed_ips` (host 없음 & `protocol: tcp` 아님) | PASS | `allowed_ips` 미사용 |
+| - 광범위한 CIDR in `allowed_ips` (예: `10.0.0.0/8`) | PASS | `allowed_ips` 미사용 |
+| - `on_error: fail_open` | PASS | 미들웨어 미사용 |
+| - 광범위한 미들웨어 호스트 셀렉터 | PASS | 미들웨어 미사용 |
+| - `allow_uninspected_credentials: true` | PASS | 미설정 (필요 없음) |
+| **최종 판정** | **PASS** | 하드 오류 없음, 스키마/구조 경고 없음, breadth 위반 없음. 정책은 의도된 사용(NVIDIA 추론 API + CVE 조회, python3 전용)에 맞게 적절히Scoped. |

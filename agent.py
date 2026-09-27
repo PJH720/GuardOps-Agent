@@ -307,11 +307,11 @@ def tool_schemas() -> list[dict]:
 # LLM client (build.nvidia.com, OpenAI-compatible)
 # ----------------------------------------------------------------------------
 def chat(messages: list[dict], model: str = MODEL, tools: list | None = None, timeout: int = 180,
-         retries: int | None = None) -> dict:
+         retries: int | None = None, max_tokens: int = 2048) -> dict:
     key = os.getenv("NVIDIA_API_KEY")
     if not key:
         raise SystemExit("NVIDIA_API_KEY 가 없습니다. .env 에 설정하거나 export 하세요. (또는 --mock)")
-    body = {"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2048}
+    body = {"model": model, "messages": messages, "temperature": 0.2, "max_tokens": max_tokens}
     if tools:
         body |= {"tools": tools, "tool_choice": "auto"}
     headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
