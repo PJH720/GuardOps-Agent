@@ -241,7 +241,8 @@ def tool_schemas() -> list[dict]:
 # ----------------------------------------------------------------------------
 # LLM client (build.nvidia.com, OpenAI-compatible)
 # ----------------------------------------------------------------------------
-def chat(messages: list[dict], model: str = MODEL, tools: list | None = None, timeout: int = 180) -> dict:
+def chat(messages: list[dict], model: str = MODEL, tools: list | None = None, timeout: int = 180,
+         retries: int | None = None) -> dict:
     key = os.getenv("NVIDIA_API_KEY")
     if not key:
         raise SystemExit("NVIDIA_API_KEY 가 없습니다. .env 에 설정하거나 export 하세요. (또는 --mock)")
@@ -249,16 +250,17 @@ def chat(messages: list[dict], model: str = MODEL, tools: list | None = None, ti
     if tools:
         body |= {"tools": tools, "tool_choice": "auto"}
     headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
-    for attempt in range(1, CHAT_RETRIES + 2):  # 일시적 5xx/타임아웃만 재시도, 4xx 는 즉시 실패
+    max_retries = CHAT_RETRIES if retries is None else retries
+    for attempt in range(1, max_retries + 2):  # 일시적 5xx/타임아웃만 재시도, 4xx 는 즉시 실패
         try:
             r = requests.post(f"{BASE_URL}/chat/completions", json=body, timeout=timeout, headers=headers)
         except requests.Timeout:
-            if attempt > CHAT_RETRIES:
+            if attempt > max_retries:
                 raise
             audit("llm_retry", model=model, attempt=attempt, cause="timeout")
             time.sleep(2 * attempt)
             continue
-        if r.status_code >= 500 and attempt <= CHAT_RETRIES:
+        if r.status_code >= 500 and attempt <= max_retries:
             audit("llm_retry", model=model, attempt=attempt, cause=f"http {r.status_code}")
             time.sleep(2 * attempt)
             continue
@@ -273,7 +275,7 @@ def guard_input(text: str) -> tuple[bool, str]:
     if not GUARD_MODEL:
         return True, "guard disabled"
     try:
-        msg = chat([{"role": "user", "content": text}], model=GUARD_MODEL, timeout=GUARD_TIMEOUT)
+        msg = chat([{"role": "user", "content": text}], model=GUARD_MODEL, timeout=GUARD_TIMEOUT, retries=0)
         verdict = (msg.get("content") or "").lower()
         # 모델별 응답 형식 모두 처리: JSON {"User Safety": "unsafe"} / 평문 "User Safety: unsafe" / "unsafe"
         unsafe = bool(re.search(r'user safety"?\s*:\s*"?unsafe', verdict)) or verdict.strip().startswith("unsafe")

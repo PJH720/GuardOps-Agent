@@ -137,7 +137,7 @@ policy/app_policy.yaml    roles, doc_clearance, egress allowlist, HITL, secret p
 policy/openshell-policy.yaml   kernel-layer sandbox policy
 tests/                    23 unit tests for the deterministic layers
 docs/evidence/            captured scenario transcripts
-docs/submission.md        Google Form texts + video script
+docs/submission.md        Google Form texts + video script (PDF: scripts/build_pdf.sh)
 ```
 
 ## ⚠️ Honest Limitations
