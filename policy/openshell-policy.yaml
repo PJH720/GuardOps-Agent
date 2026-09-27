@@ -1,0 +1,33 @@
+# OpenShell 샌드박스 정책 (커널 레이어: Landlock + seccomp + netns/OPA proxy)
+# 사용: openshell sandbox create --name guardops --policy policy/openshell-policy.yaml --upload . ...
+# 참고: OpenShell/examples/sandbox-policy-quickstart/policy.yaml 형식을 따름. 실제 버전에 맞춰 검증할 것.
+version: 1
+
+filesystem_policy:
+  include_workdir: true
+  read_only: [/bin, /usr, /lib, /proc, /dev/urandom, /etc, /var/log]
+  read_write: [/sandbox, /tmp, /dev/null]
+landlock:
+  compatibility: best_effort
+
+network_policies:
+  # 에이전트(python)는 NVIDIA API 엔드포인트에만 나갈 수 있음
+  nvidia_inference:
+    name: nvidia-build-api
+    endpoints:
+      - host: integrate.api.nvidia.com
+        port: 443
+    binaries:
+      - { path: /usr/bin/python3 }
+  # CVE 조회는 읽기 전용(GET/HEAD/OPTIONS)만
+  cve_readonly:
+    name: cve-readonly
+    endpoints:
+      - host: nvd.nist.gov
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-only
+    binaries:
+      - { path: /usr/bin/python3 }
+# 그 외 모든 목적지(예: attacker.example)는 기본 거부 → openshell logs 에 DENIED 로 기록됨
