@@ -1,0 +1,217 @@
+# ==========================================
+# 1. Local References & AI Rules (User Specified)
+# ==========================================
+# Exclude local reference materials completely
+[rR]ef/
+[rR]ef/**
+[sS]tudy/
+[sS]tudy/**
+
+# AI Agent instruction / workspace rule files
+AGENT.md
+AGENT.*
+CLAUDE.md
+CLAUDE.*
+.cursorrules
+.cursor/
+.windsurfrules
+.codeium/
+.antigravity/
+.gemini/
+.continue/
+.cline/
+.roo/
+.avante/
+.copilot/
+
+# Agent transcripts & prompt chat logs (prevents leaking internal dev chat dumps)
+*ChatLog*
+*chatlog*
+*.chatlog
+ChatLog*.md
+transcripts/
+.system_generated/
+scratch/
+
+# ==========================================
+# 2. NVIDIA & Brev Ecosystem Secrets (Domain Specific)
+# ==========================================
+# NVIDIA API key dumps or text records
+*nvapi*
+nvapi-*
+nvidia_api_key*
+ngc.key
+.ngc/
+
+# Brev GPU Cloud instance configs and tokens
+.brev/
+brev.yaml
+brev-credentials.json
+*.brev
+
+# ==========================================
+# 3. OpenShell & NemoClaw Runtime Artifacts (Hackathon Specific)
+# ==========================================
+# OpenShell sockets, runtime gates, and local gateway state
+.openshell/
+openshell.sock
+*.openshell
+openshell-gateway.json
+gateway.token
+session.key
+session_key
+*.claw
+.nemoclaw/
+.opa/
+
+# Kernel sandbox & OCSF audit logs (generated at runtime)
+ocsf-audit.json
+ocsf-events.jsonl
+sandbox.log
+audit.log
+
+# ==========================================
+# 4. Agent State, Vector Stores & LLM Cache
+# ==========================================
+# Multi-turn session persistence
+sessions/
+.sessions/
+*.session
+run_state.json
+
+# Retrieval & LLM response caching
+.langchain.db
+.langchain/
+cache.db
+prompt_cache/
+vector_index/
+chroma.sqlite3
+.chroma/
+*.faiss
+
+# SecOps test payloads & exploit simulation files
+malware_samples/
+test_payloads/
+*.payload
+
+# ==========================================
+# 5. Media & Presentation Artifacts (Video/Screen Recording)
+# ==========================================
+# Large demo recording files (prevent GitHub file size limit issues)
+*.mp4
+*.mov
+*.webm
+*.mkv
+*.avi
+*.gif
+screencast*
+raw_recordings/
+*.key
+*.pptx
+
+# ==========================================
+# 6. Sensitive Data & Credentials (CRITICAL)
+# ==========================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+credentials.json
+client_secret*.json
+auth.json
+token.json
+*token*.txt
+
+# ==========================================
+# 7. Python Environment & Caching
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ==========================================
+# 8. Node.js & Web Tooling
+# ==========================================
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.next/
+out/
+build/
+dist/
+
+# ==========================================
+# 9. IDEs & Editors & OS
+# ==========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# ==========================================
+# 10. Archives & Hackathon Agent Logs
+# ==========================================
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.dmg
+*.iso
+
+# Agent execution output & tickets
+out/audit.jsonl
+out/tickets/
+out/reports/
+out/dumps/
+*.log
+!out/.gitkeep
