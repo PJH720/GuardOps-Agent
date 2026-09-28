@@ -5,11 +5,11 @@ import { initDrawer, openDrawer, getEvidence, probeHeld, refreshDrawerIfOpen } f
 
 const ROLES = ['analyst', 'viewer', 'eng', 'hr', 'admin'];
 const STAGES = ['goal', 'screening', 'grounding', 'reasoning', 'enforcement', 'action'];
-const SCENARIO_TONE = { 1: 'accent', 2: 'danger', 3: 'info' };
+const SCENARIO_TONE = { 1: 'accent', 2: 'danger', 3: 'info', 4: 'danger' };
 
 const state = {
   role: 'analyst',
-  backend: 'nvidia',     // nvidia | onprem | mock — server re-validates
+  backend: 'nvidia',     // nvidia (primary) | onprem — server re-validates
   backends: [],
   running: false,
   ws: null,
@@ -212,7 +212,7 @@ const handlers = {
     $('#session-id').textContent = e.session_id || '—';
     $('#s-role').textContent = p.role;
     const be = state.backends.find((b) => b.id === e.backend);
-    $('#s-mode').textContent = be ? be.label : (p.mock ? 'Mock replay' : e.backend);
+    $('#s-mode').textContent = be ? be.label : e.backend;
     $('#s-clearance').textContent = `[${p.doc_clearance.join(', ')}]`;
     $('#s-reachable').textContent = `${p.reachable_docs.length} docs`;
     $('#s-excluded').innerHTML = p.excluded_docs.length
@@ -228,7 +228,7 @@ const handlers = {
           <div class="goal-text" title="${esc(p.goal)}">${esc(p.goal)}</div>
           <div class="goal-meta">
             <span class="chip">${esc(p.role)}</span>
-            <span class="chip ${p.mock ? '' : 'chip-accent'}">${p.mock ? 'mock replay' : esc(short(p.model))}</span>
+            <span class="chip chip-accent">${esc(short(p.model))}</span>
             ${e.backend === 'onprem' ? '<span class="chip chip-info">on-prem · DGX Spark · data stays on the private network</span>' : ''}
             <span class="chip">clearance [${esc(p.doc_clearance.join(', '))}]</span>
             ${p.excluded_docs.length ? `<span class="chip chip-danger">${icon('eye-off')} ${esc(p.excluded_docs.join(', '))} excluded</span>` : ''}
@@ -595,9 +595,9 @@ function setBackend(id) {
   if (!b) return;
   $('#s-mode').textContent = b.label;
   $('#model-name').textContent = short(b.model);
-  state.modelLabel = id === 'mock' ? 'Mock' : id === 'onprem' ? 'Qwen' : 'Nemotron';
+  state.modelLabel = id === 'onprem' ? 'Qwen' : 'Nemotron';
   $('#model-chip').title = `${b.label} — ${b.location}`;
-  $('#l1-engine').textContent = b.guard ? short(b.guard) : (id === 'mock' ? 'mock: guard skipped' : 'guard disabled');
+  $('#l1-engine').textContent = b.guard ? short(b.guard) : 'guard disabled';
 }
 
 function shortTitle(t) {
@@ -634,7 +634,8 @@ async function loadStatus() {
       btn.title = `${b.label} · ${b.location} — ${b.available ? short(b.model) : `unavailable: ${b.reason}`}`;
     });
     const current = state.backends.find((b) => b.id === state.backend);
-    setBackend(current?.available ? state.backend : (state.backends.find((b) => b.available)?.id || 'mock'));
+    // Nemotron(NVIDIA)이 기본이자 주력이다. 사용 불가일 때만 가용한 다른 백엔드로 옮긴다.
+    setBackend(current?.available ? state.backend : (state.backends.find((b) => b.available)?.id || 'nvidia'));
   } catch { /* status is informational */ }
 }
 

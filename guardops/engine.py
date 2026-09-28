@@ -52,7 +52,6 @@ class EngineContext:
     model: str
     guard_model: str
     quarantine_mode: str
-    mock: bool = False
     auto_approve: bool = False
     max_steps: int = 8
 
@@ -125,17 +124,17 @@ def run_agent(ctx: EngineContext, goal: str) -> Generator[AgentEvent, bool | Non
                           dt.datetime.now().isoformat(timespec="seconds"))
 
     # ── goal: RBAC 사전 필터는 이미 바인딩됨 (권한 밖 문서는 검색기 인스턴스에 존재하지 않음)
-    ctx.audit("start", role=ctx.role, goal=goal, model="mock" if ctx.mock else ctx.model,
+    ctx.audit("start", role=ctx.role, goal=goal, model=ctx.model,
               doc_clearance=sorted(ctx.doc_clearance), reachable_docs=sorted(ctx.reachable_docs))
-    yield ev("session_started", "system", "info", "goal", role=ctx.role, goal=goal, mock=ctx.mock,
-             auto_approve=ctx.auto_approve, model="mock" if ctx.mock else ctx.model,
+    yield ev("session_started", "system", "info", "goal", role=ctx.role, goal=goal,
+             auto_approve=ctx.auto_approve, model=ctx.model,
              doc_clearance=sorted(ctx.doc_clearance), reachable_docs=sorted(ctx.reachable_docs),
              excluded_docs=sorted(ctx.corpus_docs - ctx.reachable_docs), quarantine_mode=ctx.quarantine_mode)
 
     # ── Layer 1: 입력 Content Safety
-    ok, why = (True, "mock: guard skipped") if ctx.mock else ctx.guard_input(goal)
+    ok, why = ctx.guard_input(goal)
     ctx.audit("input_guard", ok=ok, detail=why)
-    guard_label = "mock" if ctx.mock else (ctx.guard_model or "disabled")
+    guard_label = ctx.guard_model or "disabled"
     yield ev("input_screened", "L1", "pass" if ok else "blocked", "screening", ok=ok, detail=why, model=guard_label)
     if not ok:
         blocked.append({"layer": "L1", "what": "user goal", "reason": why})
@@ -148,7 +147,7 @@ def run_agent(ctx: EngineContext, goal: str) -> Generator[AgentEvent, bool | Non
     require_approval = set(ctx.gate.cfg.get("require_approval", []))
 
     for step in range(1, ctx.max_steps + 1):
-        yield ev("step_started", "agent", "active", "reasoning", model="mock" if ctx.mock else ctx.model)
+        yield ev("step_started", "agent", "active", "reasoning", model=ctx.model)
         msg = ctx.llm(messages, tools=ctx.tool_schemas())
         calls = msg.get("tool_calls") or []
         content = msg.get("content") or ""

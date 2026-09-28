@@ -17,7 +17,9 @@ class InjectionFlagTest(unittest.TestCase):
         self.assertEqual(injection.scan(text), [])
 
     def test_search_runbook_labels_untrusted_hit(self):
-        agent._offline = True  # no network in unit tests
+        p = mock.patch.object(agent, "GUARD_MODEL", "")  # no network in unit tests
+        p.start()
+        self.addCleanup(p.stop)
         agent.bind_retriever(frozenset({"all"}))
         data = json.loads(agent.tool_search_runbook("벤더 공지 DB 이상 로그인 패치"))
         vendor = [h for h in data["hits"] if h["doc_id"] == "EXT-VENDOR-001"]
@@ -25,7 +27,9 @@ class InjectionFlagTest(unittest.TestCase):
         self.assertEqual(vendor[0]["trust"], "untrusted")
 
     def test_out_of_domain_search_returns_no_content(self):
-        agent._offline = True
+        p = mock.patch.object(agent, "GUARD_MODEL", "")
+        p.start()
+        self.addCleanup(p.stop)
         agent.bind_retriever(frozenset({"all"}))
         data = json.loads(agent.tool_search_runbook("비트코인 시세 알려줘"))
         self.assertFalse(data["grounded"])
@@ -38,7 +42,7 @@ class QuarantineTest(unittest.TestCase):
 
     def search_vendor(self, guard_ok, mode="dual"):
         agent.bind_retriever(frozenset({"all"}))
-        with mock.patch.object(agent, "_offline", False), mock.patch.object(agent, "GUARD_MODEL", "stub-guard"), \
+        with mock.patch.object(agent, "GUARD_MODEL", "stub-guard"), \
              mock.patch.object(agent, "QUARANTINE_MODE", mode), mock.patch.object(agent, "audit"), \
              mock.patch.object(agent, "guard_input", return_value=(guard_ok, "stub")):
             data = json.loads(agent.tool_search_runbook(self.QUERY))
@@ -70,7 +74,7 @@ class QuarantineTest(unittest.TestCase):
 
     def test_trusted_internal_runbook_is_never_quarantined(self):
         agent.bind_retriever(frozenset({"all"}))
-        with mock.patch.object(agent, "_offline", False), mock.patch.object(agent, "GUARD_MODEL", "stub-guard"), \
+        with mock.patch.object(agent, "GUARD_MODEL", "stub-guard"), \
              mock.patch.object(agent, "QUARANTINE_MODE", "any"), mock.patch.object(agent, "audit"), \
              mock.patch.object(agent, "guard_input", return_value=(False, "stub")):
             data = json.loads(agent.tool_search_runbook("운영 DB 이상 로그인 대응 런북"))
