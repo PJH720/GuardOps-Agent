@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GuardOps Console · NexaGuard</title>
+  <meta name="description" content="GuardOps-Agent SecOps console — Nemotron ReAct agent behind a 3-layer defense (Content Safety · PolicyGate · OpenShell).">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="/static/css/console.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
+  <script type="module" src="/static/js/app.js"></script>
+</head>
+<body>
+  <!-- ─────────────────────────── Top bar ─────────────────────────── -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" data-icon="shield"></span>
+      <div class="brand-text">
+        <span class="brand-name">GuardOps <span class="brand-sub">Console</span></span>
+        <span class="brand-org">NexaGuard · Agentic SecOps</span>
+      </div>
+      <span class="chip chip-model" id="model-chip" title="Reasoning model">
+        <span class="dot dot-accent"></span><span id="model-name">nemotron-3-super-120b</span>
+      </span>
+    </div>
+
+    <div class="controls">
+      <div class="seg" role="radiogroup" aria-label="Role" id="role-seg"></div>
+      <div class="seg seg-mode" role="radiogroup" aria-label="Run mode">
+        <button class="seg-btn is-on" data-mode="live" role="radio" aria-checked="true">Live</button>
+        <button class="seg-btn" data-mode="mock" role="radio" aria-checked="false">Mock replay</button>
+      </div>
+      <label class="switch" title="create_incident_ticket 을 사람 승인 없이 실행">
+        <input type="checkbox" id="auto-approve">
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+        <span class="switch-label">Auto-approve</span>
+      </label>
+      <span class="conn" id="conn" data-state="idle"><span class="dot"></span><span class="conn-label">Idle</span></span>
+      <button class="btn btn-ghost" id="open-drawer"><span data-icon="layers"></span>Evidence</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <!-- ─────────────────── Executive security HUD ─────────────────── -->
+    <section class="hud" aria-label="3-layer defense status">
+      <article class="layer" id="layer-L1" data-state="normal">
+        <header class="layer-head">
+          <span class="layer-eyebrow">Layer 1 · Prompt</span>
+          <span class="state-pill"><span class="pulse"></span><span class="state-text">Normal</span></span>
+        </header>
+        <h3 class="layer-title">Content Safety</h3>
+        <p class="layer-engine mono" id="l1-engine">nemotron-3.5-content-safety</p>
+        <dl class="metrics">
+          <div><dt>Screened</dt><dd id="m-screened">0</dd></div>
+          <div><dt>Flagged</dt><dd id="m-flagged">0</dd></div>
+          <div><dt>Quarantined</dt><dd id="m-quarantined">0</dd></div>
+        </dl>
+      </article>
+      <article class="layer" id="layer-L2" data-state="normal">
+        <header class="layer-head">
+          <span class="layer-eyebrow">Layer 2 · Harness</span>
+          <span class="state-pill"><span class="pulse"></span><span class="state-text">Normal</span></span>
+        </header>
+        <h3 class="layer-title">Deterministic PolicyGate</h3>
+        <p class="layer-engine mono">RBAC · L7 egress allowlist · secret patterns</p>
+        <dl class="metrics">
+          <div><dt>Decisions</dt><dd id="m-decisions">0</dd></div>
+          <div><dt>Denied</dt><dd id="m-denied">0</dd></div>
+          <div><dt>Approvals</dt><dd id="m-approvals">0</dd></div>
+        </dl>
+      </article>
+      <article class="layer" id="layer-L3" data-state="verified">
+        <header class="layer-head">
+          <span class="layer-eyebrow">Layer 3 · Kernel</span>
+          <span class="state-pill"><span class="pulse"></span><span class="state-text">Verified</span></span>
+        </header>
+        <h3 class="layer-title">OpenShell Sandbox</h3>
+        <p class="layer-engine mono">Landlock · OPA egress · L7 proxy · seccomp</p>
+        <button class="layer-link" id="l3-link">Recorded sandbox run · view kernel traces <span data-icon="arrow-right"></span></button>
+        <dl class="metrics">
+          <div><dt>OCSF denies</dt><dd id="m-ocsf">–</dd></div>
+          <div><dt>Probes</dt><dd id="m-probes">–</dd></div>
+          <div><dt>Policy audit</dt><dd id="m-policy">–</dd></div>
+        </dl>
+      </article>
+    </section>
+
+    <div class="workbench">
+      <div class="col-main">
+        <!-- ─────────────────── Scenario launcher ─────────────────── -->
+        <section class="panel launcher">
+          <header class="panel-head">
+            <h2>Investigations</h2>
+            <span class="panel-hint">Preset scenarios run with the selected mode</span>
+          </header>
+          <div class="scenarios" id="scenarios"></div>
+          <form class="goal-bar" id="goal-form" autocomplete="off">
+            <span class="goal-icon" data-icon="terminal"></span>
+            <input id="goal-input" type="text" placeholder="Describe a security alert or task for the agent…" aria-label="Agent goal">
+            <span class="goal-role mono" id="goal-role">analyst</span>
+            <button class="btn btn-primary" id="run-btn" type="submit"><span data-icon="play"></span>Run</button>
+          </form>
+        </section>
+
+        <!-- ─────────────────── Pipeline stepper ─────────────────── -->
+        <section class="panel pipeline-panel">
+          <ol class="pipeline" id="pipeline">
+            <li data-stage="goal"><span class="node" data-icon="user"></span><span class="p-label">User goal</span><span class="p-sub" id="ps-goal">Awaiting input</span></li>
+            <li data-stage="screening"><span class="node" data-icon="shield"></span><span class="p-label">Input screening</span><span class="p-sub" id="ps-screening">Content Safety</span></li>
+            <li data-stage="grounding"><span class="node" data-icon="search"></span><span class="p-label">RBAC grounding</span><span class="p-sub" id="ps-grounding">Pre-filtered retriever</span></li>
+            <li data-stage="reasoning"><span class="node" data-icon="cpu"></span><span class="p-label">Nemotron reasoning</span><span class="p-sub" id="ps-reasoning">ReAct</span></li>
+            <li data-stage="enforcement"><span class="node" data-icon="lock"></span><span class="p-label">Policy enforcement</span><span class="p-sub" id="ps-enforcement">PolicyGate</span></li>
+            <li data-stage="action"><span class="node" data-icon="zap"></span><span class="p-label">Action</span><span class="p-sub" id="ps-action">Tools · tickets</span></li>
+          </ol>
+        </section>
+
+        <!-- ─────────────────── Execution timeline ─────────────────── -->
+        <section class="panel timeline-panel">
+          <header class="panel-head">
+            <h2>Execution timeline</h2>
+            <span class="run-status mono" id="run-status">No active session</span>
+          </header>
+          <div class="timeline" id="timeline">
+            <div class="empty">
+              <span class="empty-icon" data-icon="activity"></span>
+              <p class="empty-title">No active investigation</p>
+              <p class="empty-text">Launch a scenario above. Every model step, policy decision and defense action streams here as a structured event.</p>
+            </div>
+          </div>
+          <div id="report-slot"></div>
+        </section>
+      </div>
+
+      <!-- ─────────────────── Session rail ─────────────────── -->
+      <aside class="col-rail">
+        <section class="panel rail-card">
+          <header class="panel-head"><h2>Session</h2><span class="mono panel-hint" id="session-id">—</span></header>
+          <dl class="kv" id="session-kv">
+            <div><dt>Role</dt><dd id="s-role">analyst</dd></div>
+            <div><dt>Mode</dt><dd id="s-mode">Live</dd></div>
+            <div><dt>Clearance</dt><dd id="s-clearance">—</dd></div>
+            <div><dt>Reachable docs</dt><dd id="s-reachable">—</dd></div>
+          </dl>
+          <div class="excluded" id="s-excluded"></div>
+        </section>
+        <section class="panel rail-card">
+          <header class="panel-head"><h2>Blocked attempts</h2><span class="count-badge" id="blocked-count">0</span></header>
+          <ul class="blocked-list" id="blocked-list"><li class="muted">Nothing blocked yet</li></ul>
+        </section>
+        <section class="panel rail-card">
+          <header class="panel-head"><h2>Incident tickets</h2></header>
+          <div id="ticket-rail"><p class="muted">No ticket issued in this session</p></div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <!-- ─────────────────── HITL approval modal ─────────────────── -->
+  <div class="modal-backdrop" id="hitl" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="hitl-title">
+      <header class="modal-head">
+        <span class="modal-icon" data-icon="alert"></span>
+        <div>
+          <h3 id="hitl-title">Approval required</h3>
+          <p class="modal-sub">PolicyGate pre-check passed · a human must authorize this irreversible action</p>
+        </div>
+      </header>
+      <div class="modal-body" id="hitl-body"></div>
+      <footer class="modal-foot">
+        <span class="kbd-hint"><kbd>Esc</kbd> reject · <kbd>⏎</kbd> approve</span>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="hitl-reject">Reject</button>
+          <button class="btn btn-primary" id="hitl-approve"><span data-icon="check"></span>Approve &amp; execute</button>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ─────────────────── Evidence drawer ─────────────────── -->
+  <div class="drawer-backdrop" id="drawer-backdrop"></div>
+  <aside class="drawer" id="drawer" aria-label="Telemetry and kernel evidence" aria-hidden="true">
+    <header class="drawer-head">
+      <div>
+        <h3>Telemetry &amp; kernel evidence</h3>
+        <p class="modal-sub">Audit trail, OpenShell traces and policy verification for technical review</p>
+      </div>
+      <button class="icon-btn" id="close-drawer" aria-label="Close"><span data-icon="x"></span></button>
+    </header>
+    <nav class="tabs" id="drawer-tabs">
+      <button class="tab is-on" data-tab="audit">Audit log</button>
+      <button class="tab" data-tab="kernel">Kernel traces</button>
+      <button class="tab" data-tab="policy">Policy audit</button>
+      <button class="tab" data-tab="rbac">RBAC proof</button>
+      <button class="tab" data-tab="tickets">Tickets</button>
+    </nav>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+</body>
+</html>

@@ -215,3 +215,10 @@ out/reports/
 out/dumps/
 *.log
 !out/.gitkeep
+
+# ==========================================
+# 11. Local AI-tool caches (never in repo)
+# ==========================================
+.omc/
+.serena/
+.claude/
