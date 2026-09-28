@@ -4,7 +4,7 @@
 > **Mission**: Enterprise Security Operations Agent with Multi-Layer Defense — *스스로 대응하되, 선을 넘지 않는다*  
 > **Tech Stack**: NVIDIA Nemotron 3 Super (build.nvidia.com) · Nemotron Content Safety · NVIDIA Agent Skills (custom + official NVIDIA catalog skill) · NVIDIA OpenShell (executed) · On-Prem RBAC RAG · On-prem inference on NVIDIA DGX Spark (SGLang + Qwen3.8 NVFP4 over Local Net)
 
-🌐 **Live console**: https://guardops-agent.vercel.app · 📹 **Demo video**: _TBD — link will be added after recording_ · 📄 **Submission**: [`docs/submission.md`](docs/submission.md)
+🌐 **Live console**: https://guardops-agent.vercel.app · 📹 **Demo video**: _TBD — link will be added after recording_
 
 ---
 
@@ -173,7 +173,6 @@ sandbox/Dockerfile        OpenShell sandbox image (NVIDIA base + python3)
 run_in_openshell.sh       verified OpenShell run procedure; scripts/openshell_probes.sh
 tests/                    74 tests: RBAC, grounding, policy gate, egress, quarantine, auditor, e2e loop, engine, web, backends
 docs/evidence/            captured live transcripts
-docs/submission.md        Google Form texts + video script (PDF: scripts/build_pdf.sh)
 ```
 
 ## ⚠️ Honest Limitations
