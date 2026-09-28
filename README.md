@@ -78,15 +78,6 @@ Alert ─▶ [Content Safety] ─▶ Nemotron ReAct ─▶ Policy Gate ──┬
 | **NVIDIA DGX Spark** — on-prem inference: SGLang serving `Inferact/Qwen3.8-Flash-Next-NVFP4` (NVFP4) over a zero-trust private network | Third inference backend (`--backend onprem` / console **Qwen · DGX Spark**). Same tools, PolicyGate, quarantine, HITL and audit as the cloud backend. Requests set `enable_thinking=false`. The Layer-1 guard also runs on the Spark (a prompted classifier), so **no data leaves the private network** | `agent.py` `backend_config()`, `guard_input()` · [`onprem_qwen_run.txt`](docs/evidence/onprem_qwen_run.txt) |
 | **DLI: Securing Agents with NemoClaw and OpenShell** | Prompt → Harness → Sandbox layering, Lethal Trifecta threat model | whole design |
 
-## 🔗 Enterprise RAG Fusion (from our prior `on-prem-rag-service`)
-
-The security core of our earlier Next.js on-prem RAG service (`lib/rbac.ts`, `lib/retriever.ts`, `lib/search.ts`, `scripts/ingest.ts`) was ported to Python in [`guardops/`](guardops/):
-
-- **Deterministic RBAC pre-filter** ([`guardops/retriever.py`](guardops/retriever.py)): `RbacBm25Retriever(index, clearance)` keeps only permitted chunks, as an immutable tuple, **in its constructor**. Unauthorized chunks never exist on the instance, so no scoring bug can leak them into the prompt. Clearance per role lives in `policy/app_policy.yaml → doc_clearance`.
-- **Grounding confidence gate**: BM25 top score ≥ 10, a shallow-match guard, and a composite `coverage × score/(score+15)` ≥ 0.10. Below any threshold, `search_runbook` returns **no document content**. Measured on this corpus, all 3 out-of-domain probes are rejected ([`grounding_probe.txt`](docs/evidence/grounding_probe.txt)). The gate is lexical: it blocks off-topic queries; RBAC is the security boundary.
-- **Role-spoofing sanitizer**, a **Korean hybrid tokenizer**, and **KO↔EN SecOps synonym bridges**, so an English alert grounds against Korean runbooks.
-- **Enterprise corpus** (`knowledge/`): the incident runbook (S1–S4 SLA, escalation), security rules, the GenAI guideline, an **eng-only** CI/CD standard, an **hr-only** HR record rule, and a poisoned vendor notice (`trust: untrusted`).
-
 ## 🚀 Quickstart (reproduction)
 
 ```bash
@@ -174,14 +165,6 @@ run_in_openshell.sh       verified OpenShell run procedure; scripts/openshell_pr
 tests/                    74 tests: RBAC, grounding, policy gate, egress, quarantine, auditor, e2e loop, engine, web, backends
 docs/evidence/            captured live transcripts
 ```
-
-## ⚠️ Honest Limitations
-
-- **OpenShell was executed on a local macOS gateway (VM driver), not on NVIDIA Brev.** The Docker compute driver can't be used on Docker Desktop for Mac, because it relies on `--network host`. The live Nemotron agent run *inside* the sandbox with provider credential injection was **not** completed: `openshell provider create --type nvidia` requires importing a provider profile. In-sandbox evidence covers network/Landlock enforcement, the offline replay loop (via the since-removed `--mock` flag) and the test suite.
-- **Content Safety is a safety classifier, not a dedicated injection detector.** Injection detection is deterministic (regex); Content Safety is a second, independent signal. Quarantine needs both by default (`dual`) to limit false positives. `nvidia/llama-3.1-nemoguard-8b-content-safety` timed out on build.nvidia.com on 2026-09-28, so we use `nvidia/nemotron-3.5-content-safety`.
-- **On-prem backend scope.** The DGX Spark SGLang endpoint has no authentication, so it is never exposed directly. The live console reaches it only through `scripts/onprem_relay.py` (bearer token, `POST /v1/chat/completions` + `GET /v1/models` only, 64 KB body cap, `max_tokens` ≤ 2048, model pinned) behind a Cloudflare quick tunnel running on a team machine inside the private network. When that machine or tunnel is down, the console shows the Qwen backend as offline and Nemotron keeps working; a tunnel restart changes the URL (env update + redeploy). The public deployment also caps runs per IP and per hour to protect the API key. Its Layer-1 guard is Qwen with a fixed classifier prompt, **not a safety-tuned model**; a first prompt version was too strict and was refined (see evidence). The OpenShell kernel policy covers the cloud (`integrate.api.nvidia.com`) path only.
-- **The grounding gate is lexical (BM25).** It rejects off-topic queries but can admit a weakly related permitted document. RBAC, not the gate, is the confidentiality boundary.
-- Business actions are simulated: tickets are JSON files and the ACL is YAML. There is no SIEM or IdP integration yet.
 
 ## 📄 License
 MIT License. `skills/generate-sandbox-policy/` is © NVIDIA, Apache-2.0 (see its `NOTICE.md`).
