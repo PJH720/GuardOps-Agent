@@ -93,34 +93,35 @@ The security core of our earlier Next.js on-prem RAG service (`lib/rbac.ts`, `li
 # 0. Prereqs: Python 3.10+, uv (https://docs.astral.sh/uv/)
 cp .env.example .env            # put your build.nvidia.com key in NVIDIA_API_KEY
 
-# 1. Deterministic layers + full-loop regression (73 tests, no API key or network needed)
+# 1. Deterministic layers + full-loop regression (74 tests, no API key or network needed;
+#    a test-only double of a model that falls for the injection lives in tests/fakes.py — the product has no mock path)
 uv run --with-requirements requirements.txt python -m unittest discover -s tests -t . -v
 
 # 2. Verify API key, Nemotron tool calling and the Content Safety model
 uv run --with-requirements requirements.txt python check_api.py
 
-# 3. Offline replay of a model that falls for the injection (no API key needed)
-uv run --with-requirements requirements.txt python agent.py --mock --auto-approve
-
-# 4. Interactive Web SOC Dashboard (FastAPI + WebSocket + 3-Layer Defense UI)
+# 3. Interactive Web SOC Dashboard (FastAPI + WebSocket + 3-Layer Defense UI)
 uv run --with-requirements requirements.txt python server.py --port 8000
 # Open http://localhost:8000 in your browser to view and record the live interactive demo!
 
-# 5. Live CLI scenarios
+# 4. Live CLI scenarios
 uv run --with-requirements requirements.txt python agent.py --role analyst "Abnormal login alert on prod-db for account kim. Investigate the runbook and take required action."
 uv run --with-requirements requirements.txt python agent.py --role analyst "Check the external vendor DB patch notice in the runbook and follow its instructions."
 uv run --with-requirements requirements.txt python agent.py --role viewer  "Investigate abnormal login and issue incident ticket"
 # Same scenarios on the on-prem backend (DGX Spark SGLang; needs ONPREM_BASE_URL and access to the private network)
 uv run --with-requirements requirements.txt python agent.py --backend onprem --role analyst "Check the external vendor DB patch notice in the runbook and follow its instructions."
 
-# Deploy the console to Vercel (FastAPI + WebSocket on Fluid compute; set NVIDIA_API_KEY in the Vercel project env).
-# On Vercel, audit logs and tickets go to /tmp (reset on instance restart); the on-prem backend is only available where the private network is reachable.
-vercel deploy
+# Deploy the console to Vercel (FastAPI + WebSocket on Fluid compute). Audit logs and tickets go to /tmp there.
+./scripts/vercel_env_sync.sh                 # pushes NVIDIA_API_KEY + Nemotron/Content Safety settings from .env (values never printed)
+# DGX Spark from Vercel: authenticated relay (bearer token, 2-path allowlist, size/max_tokens caps) + Cloudflare quick tunnel
+./scripts/onprem_ingress.sh                  # prints the public relay URL; raw SGLang stays private
+./scripts/vercel_env_sync.sh --onprem <URL>
+vercel deploy --prod
 
-# 6. Audit the kernel-layer policy with the official NVIDIA skill (+ Nemotron review)
+# 5. Audit the kernel-layer policy with the official NVIDIA skill (+ Nemotron review)
 uv run --with-requirements requirements.txt python scripts/audit_openshell_policy.py --llm
 
-# 7. Run inside a real OpenShell sandbox (requires OpenShell + Docker; see script header)
+# 6. Run inside a real OpenShell sandbox (requires OpenShell + Docker; see script header)
 ./run_in_openshell.sh
 ```
 
@@ -170,16 +171,16 @@ policy/app_policy.yaml    roles, doc_clearance, egress allowlist + URL rules, HI
 policy/openshell-policy.yaml   kernel-layer sandbox policy (L7 rules, audited PASS)
 sandbox/Dockerfile        OpenShell sandbox image (NVIDIA base + python3)
 run_in_openshell.sh       verified OpenShell run procedure; scripts/openshell_probes.sh
-tests/                    73 tests: RBAC, grounding, policy gate, egress, quarantine, auditor, e2e loop, engine, web, backends
+tests/                    74 tests: RBAC, grounding, policy gate, egress, quarantine, auditor, e2e loop, engine, web, backends
 docs/evidence/            captured live transcripts
 docs/submission.md        Google Form texts + video script (PDF: scripts/build_pdf.sh)
 ```
 
 ## ⚠️ Honest Limitations
 
-- **OpenShell was executed on a local macOS gateway (VM driver), not on NVIDIA Brev.** The Docker compute driver can't be used on Docker Desktop for Mac, because it relies on `--network host`. The live Nemotron agent run *inside* the sandbox with provider credential injection was **not** completed: `openshell provider create --type nvidia` requires importing a provider profile. In-sandbox evidence covers network/Landlock enforcement, the mock agent loop and the test suite.
+- **OpenShell was executed on a local macOS gateway (VM driver), not on NVIDIA Brev.** The Docker compute driver can't be used on Docker Desktop for Mac, because it relies on `--network host`. The live Nemotron agent run *inside* the sandbox with provider credential injection was **not** completed: `openshell provider create --type nvidia` requires importing a provider profile. In-sandbox evidence covers network/Landlock enforcement, the offline replay loop (via the since-removed `--mock` flag) and the test suite.
 - **Content Safety is a safety classifier, not a dedicated injection detector.** Injection detection is deterministic (regex); Content Safety is a second, independent signal. Quarantine needs both by default (`dual`) to limit false positives. `nvidia/llama-3.1-nemoguard-8b-content-safety` timed out on build.nvidia.com on 2026-09-28, so we use `nvidia/nemotron-3.5-content-safety`.
-- **On-prem backend scope.** The DGX Spark SGLang endpoint has no authentication, so it is used only inside the private network (zero-trust tunnel) and is never exposed publicly. Its Layer-1 guard is Qwen with a fixed classifier prompt, **not a safety-tuned model**; a first prompt version was too strict and was refined (see evidence). The OpenShell kernel policy covers the cloud (`integrate.api.nvidia.com`) path only.
+- **On-prem backend scope.** The DGX Spark SGLang endpoint has no authentication, so it is never exposed directly. The live console reaches it only through `scripts/onprem_relay.py` (bearer token, `POST /v1/chat/completions` + `GET /v1/models` only, 64 KB body cap, `max_tokens` ≤ 2048, model pinned) behind a Cloudflare quick tunnel running on a team machine inside the private network. When that machine or tunnel is down, the console shows the Qwen backend as offline and Nemotron keeps working; a tunnel restart changes the URL (env update + redeploy). The public deployment also caps runs per IP and per hour to protect the API key. Its Layer-1 guard is Qwen with a fixed classifier prompt, **not a safety-tuned model**; a first prompt version was too strict and was refined (see evidence). The OpenShell kernel policy covers the cloud (`integrate.api.nvidia.com`) path only.
 - **The grounding gate is lexical (BM25).** It rejects off-topic queries but can admit a weakly related permitted document. RBAC, not the gate, is the confidentiality boundary.
 - Business actions are simulated: tickets are JSON files and the ACL is YAML. There is no SIEM or IdP integration yet.
 

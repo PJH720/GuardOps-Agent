@@ -1,7 +1,7 @@
 """Web SOC Dashboard wiring: the WebSocket loop must run the same harness as agent.run().
 
-MockLLM replays a model that falls for the injected vendor notice. Every run is offline (mock=True) and writes to a
-temp OUT_DIR. The key regression: the HITL modal must never let a role skip PolicyGate (RBAC before human approval).
+agent.chat is replaced by tests/fakes.FooledModel (a test-only double of a model that falls for the injected vendor
+notice), the network guard is disabled, and every run writes to a temp OUT_DIR. The server itself has no mock path. The key regression: the HITL modal must never let a role skip PolicyGate (RBAC before human approval).
 """
 import json
 import tempfile
@@ -14,6 +14,7 @@ from starlette.websockets import WebSocketDisconnect
 
 import agent
 import server
+from tests.fakes import FooledModel
 
 GOAL = "prod-db 이상 로그인 알림 대응"
 
@@ -23,19 +24,20 @@ class DashboardWebSocketTest(unittest.TestCase):
         tmpdir = tempfile.TemporaryDirectory()  # addCleanup keeps Python 3.10 support
         self.addCleanup(tmpdir.cleanup)
         self.out = Path(tmpdir.name)
-        saved = (agent._offline, agent._retriever)
-        self.addCleanup(lambda: (setattr(agent, "_offline", saved[0]), setattr(agent, "_retriever", saved[1])))
+        saved = (agent._backend, agent._retriever)
+        self.addCleanup(lambda: (setattr(agent, "_backend", saved[0]), setattr(agent, "_retriever", saved[1])))
+        server._run_log.clear()
         for patch in (mock.patch.object(agent, "OUT_DIR", self.out),
-                      # mock 실행은 네트워크 가드를 절대 호출하면 안 된다
-                      mock.patch.object(agent, "guard_input", side_effect=AssertionError("network guard called"))):
+                      mock.patch.object(agent, "GUARD_MODEL", ""),
+                      mock.patch.dict("os.environ", {"NVIDIA_API_KEY": "test-key"})):
             patch.start()
             self.addCleanup(patch.stop)
         self.client = TestClient(server.app)
 
     def run_ws(self, role: str, auto_approve: bool, approve: bool = True) -> list[dict]:
         msgs = []
-        with self.client.websocket_connect("/ws/agent") as ws:
-            ws.send_json({"goal": GOAL, "role": role, "auto_approve": auto_approve, "mock": True})
+        with mock.patch.object(agent, "chat", new=FooledModel()), self.client.websocket_connect("/ws/agent") as ws:
+            ws.send_json({"goal": GOAL, "role": role, "auto_approve": auto_approve, "backend": "nvidia"})
             while True:
                 m = ws.receive_json()
                 msgs.append(m)
@@ -112,7 +114,7 @@ class DashboardWebSocketTest(unittest.TestCase):
 
     def test_unknown_role_is_rejected_cleanly(self):
         with self.client.websocket_connect("/ws/agent") as ws:
-            ws.send_json({"goal": GOAL, "role": "root", "mock": True})
+            ws.send_json({"goal": GOAL, "role": "root"})
             self.assertEqual(ws.receive_json()["type"], "error")
             self.assertEqual(ws.receive_json()["type"], "done")
 
@@ -125,23 +127,36 @@ class DashboardWebSocketTest(unittest.TestCase):
             self.assertEqual(ws.receive_json()["type"], "done")
 
     def test_status_lists_backends_without_leaking_onprem_host(self):
-        with mock.patch.object(server, "probe_onprem", return_value={"available": True, "reason": "reachable on the private network"}), \
+        with mock.patch.object(server, "probe_onprem", return_value={"available": True, "reason": "DGX Spark reachable"}), \
              mock.patch.object(agent, "ONPREM_BASE_URL", "http://secret-host.internal:8000/v1"):
             status = self.client.get("/api/status").json()
         backends = {b["id"]: b for b in status["backends"]}
-        self.assertEqual(set(backends), {"nvidia", "onprem", "mock"})
+        self.assertEqual(set(backends), {"nvidia", "onprem"})  # mock 백엔드는 없다
         self.assertTrue(backends["onprem"]["available"])
         self.assertEqual(backends["onprem"]["model"], agent.ONPREM_MODEL)
         self.assertNotIn("secret-host", str(status))  # 무인증 온프레미스 엔드포인트 주소는 노출하지 않는다
 
-    def test_mock_backend_events_are_tagged(self):
-        msgs = []
+    def test_mock_backend_no_longer_exists(self):
         with self.client.websocket_connect("/ws/agent") as ws:
             ws.send_json({"goal": GOAL, "role": "viewer", "backend": "mock"})
+            self.assertIn("백엔드", ws.receive_json()["message"])
+            self.assertEqual(ws.receive_json()["type"], "done")
+        # 구 클라이언트의 mock:true 도 실제 백엔드(nvidia)로만 간다
+        with mock.patch.object(agent, "chat", new=FooledModel()), self.client.websocket_connect("/ws/agent") as ws:
+            ws.send_json({"goal": GOAL, "role": "viewer", "mock": True})
+            msgs = []
             while (m := ws.receive_json())["type"] != "done":
                 msgs.append(m)
-        self.assertEqual(self.of(msgs, "error"), [])
-        self.assertEqual({m.get("backend") for m in msgs}, {"mock"})
+        self.assertEqual({m.get("backend") for m in msgs}, {"nvidia"})
+
+    def test_public_run_cap_limits_each_ip(self):
+        with mock.patch.object(server, "RUN_CAP_PER_IP", 2), mock.patch.object(server, "RUN_CAP_GLOBAL", 3):
+            self.assertIsNone(server._check_run_cap("1.1.1.1", now=0))
+            self.assertIsNone(server._check_run_cap("1.1.1.1", now=1))
+            self.assertIn("10분", server._check_run_cap("1.1.1.1", now=2))
+            self.assertIsNone(server._check_run_cap("2.2.2.2", now=3))
+            self.assertIn("시간당", server._check_run_cap("3.3.3.3", now=4))
+            self.assertIsNone(server._check_run_cap("1.1.1.1", now=3700))  # 1시간 뒤 창이 비워진다
 
     def test_cross_origin_websocket_is_refused(self):
         with self.assertRaises(WebSocketDisconnect):

@@ -1,6 +1,7 @@
 """Headless engine contract: typed events, the send() HITL protocol, and gate-before-human ordering.
 
-Offline: MockLLM replays a model that falls for the injected vendor notice; audit goes to a temp OUT_DIR.
+Offline: tests/fakes.FooledModel replays a model that falls for the injected vendor notice (test-only double);
+the network guard is disabled and audit goes to a temp OUT_DIR.
 """
 import tempfile
 import unittest
@@ -9,6 +10,7 @@ from unittest import mock
 
 import agent
 from guardops.engine import AgentEvent, cite_rule, run_agent
+from tests.fakes import FINAL_TEXT, FooledModel
 
 REQUIRED_KEYS = {"id", "type", "layer", "status", "stage", "step", "payload", "timestamp"}
 STAGES = {"goal", "screening", "grounding", "reasoning", "enforcement", "action"}
@@ -18,14 +20,16 @@ class EngineTest(unittest.TestCase):
     def setUp(self):
         tmpdir = tempfile.TemporaryDirectory()  # addCleanup keeps Python 3.10 support
         self.addCleanup(tmpdir.cleanup)
-        saved = (agent._offline, agent._retriever)
-        self.addCleanup(lambda: (setattr(agent, "_offline", saved[0]), setattr(agent, "_retriever", saved[1])))
-        patch = mock.patch.object(agent, "OUT_DIR", Path(tmpdir.name))
-        patch.start()
-        self.addCleanup(patch.stop)
+        saved = (agent._backend, agent._retriever)
+        self.addCleanup(lambda: (setattr(agent, "_backend", saved[0]), setattr(agent, "_retriever", saved[1])))
+        for patch in (mock.patch.object(agent, "OUT_DIR", Path(tmpdir.name)),
+                      mock.patch.object(agent, "GUARD_MODEL", ""),  # 네트워크 가드 없이 하네스만 검증
+                      mock.patch.object(agent, "chat", side_effect=AssertionError("network LLM called"))):
+            patch.start()
+            self.addCleanup(patch.stop)
 
     def drive(self, role: str, auto_approve: bool, decision: bool = True) -> tuple[list[AgentEvent], str]:
-        gen = run_agent(agent.build_context(role, auto_approve, mock=True), "prod-db 이상 로그인 대응")
+        gen = run_agent(agent.build_context(role, auto_approve, llm=FooledModel()), "prod-db 이상 로그인 대응")
         events, reply = [], None
         try:
             while True:
@@ -49,7 +53,7 @@ class EngineTest(unittest.TestCase):
             self.assertEqual(set(e.to_dict()), REQUIRED_KEYS)
             self.assertIn(e.stage, STAGES)
             self.assertIn(e.layer, {"L1", "L2", "L3", "agent", "system"})
-        self.assertTrue(final.startswith("[mock]"))
+        self.assertEqual(final, FINAL_TEXT)
 
     def test_policy_decision_precedes_every_tool_result(self):
         events, _ = self.drive("analyst", auto_approve=True)
@@ -92,10 +96,11 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(report["risk"], "critical")
         self.assertTrue(any(b["what"] == "fetch_url" for b in report["blocked_attempts"]))
 
-    def test_mock_never_calls_network_guard(self):
-        with mock.patch.object(agent, "guard_input", side_effect=AssertionError("network guard called")):
-            events, _ = self.drive("analyst", auto_approve=True)
-        self.assertEqual(events[1].payload["model"], "mock")
+    def test_injected_llm_never_touches_the_network(self):
+        # setUp 이 agent.chat 을 AssertionError 로 막아 두었다: 주입된 더블만 쓰이고 실제 백엔드는 호출되지 않는다
+        events, _ = self.drive("analyst", auto_approve=True)
+        self.assertEqual(events[1].payload["model"], "disabled")
+        self.assertEqual(events[0].payload["model"], agent.MODEL)
 
     def test_cite_rule(self):
         self.assertEqual(cite_rule("role 'viewer' is not allowed to call 'fetch_url'", "viewer", "fetch_url"),

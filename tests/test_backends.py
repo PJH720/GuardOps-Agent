@@ -19,9 +19,8 @@ def fake_response(content="ok", status=200):
 
 class BackendTest(unittest.TestCase):
     def setUp(self):
-        saved = (agent._backend, agent._offline, agent._retriever)
-        self.addCleanup(lambda: (setattr(agent, "_backend", saved[0]), setattr(agent, "_offline", saved[1]),
-                                 setattr(agent, "_retriever", saved[2])))
+        saved = (agent._backend, agent._retriever)
+        self.addCleanup(lambda: (setattr(agent, "_backend", saved[0]), setattr(agent, "_retriever", saved[1])))
         for p in (mock.patch.object(agent, "ONPREM_BASE_URL", ONPREM_URL), mock.patch.object(agent, "audit")):
             p.start()
             self.addCleanup(p.stop)
@@ -88,7 +87,7 @@ class BackendTest(unittest.TestCase):
             self.assertTrue(agent.guard_enabled())
 
     def test_build_context_labels_backend_and_keeps_the_same_gate(self):
-        ctx = agent.build_context("viewer", auto_approve=False, mock=False, backend="onprem")
+        ctx = agent.build_context("viewer", auto_approve=False, backend="onprem")
         self.assertEqual(agent._backend, "onprem")
         self.assertEqual(ctx.model, agent.ONPREM_MODEL)
         self.assertIn("on-prem", ctx.guard_model)
@@ -96,7 +95,7 @@ class BackendTest(unittest.TestCase):
         allowed, _ = ctx.gate.check("create_incident_ticket", {})
         self.assertFalse(allowed)
         with self.assertRaises(agent.LLMError):
-            agent.build_context("analyst", auto_approve=True, mock=False, backend="elsewhere")
+            agent.build_context("analyst", auto_approve=True, backend="elsewhere")
 
 
 if __name__ == "__main__":

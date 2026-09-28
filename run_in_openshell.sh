@@ -35,9 +35,9 @@ openshell sandbox delete "$NAME" >/dev/null 2>&1 || true
 openshell sandbox create --name "$NAME" --from "$IMAGE" --policy policy/openshell-policy.yaml \
   --upload "$STAGE/.:/sandbox/guardops" --no-git-ignore --no-auto-providers --no-tty --detach
 
-# 5. 프로브(허용/차단 경로) + 샌드박스 안에서 에이전트 실행
+# 5. 프로브(허용/차단 경로) + 샌드박스 안에서 에이전트 루프 회귀(속은 모델 테스트 더블, 키 불필요)
 openshell sandbox exec -n "$NAME" --no-tty --timeout 180 -- bash -s < scripts/openshell_probes.sh
-printf 'cd /sandbox/guardops/* && python3 agent.py --mock --auto-approve\n' \
+printf 'cd /sandbox/guardops/* && python3 -m unittest tests.test_agent_e2e -v\n' \
   | openshell sandbox exec -n "$NAME" --no-tty --timeout 180 -- bash -s
 
 # 6. 커널 계층 판정 로그 (OCSF): engine:opa = 바이너리+호스트, engine:l7 = 메서드+경로

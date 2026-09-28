@@ -1,6 +1,6 @@
-"""End-to-end regression: the full ReAct loop (MockLLM → PolicyGate → tools → audit) for the 3 demo scenarios.
+"""End-to-end regression: the full ReAct loop (FooledModel → PolicyGate → tools → audit) for the demo scenarios.
 
-MockLLM replays a model that *falls for* the injected vendor notice, so these tests prove the harness layer
+tests/fakes.FooledModel (test-only double) replays a model that *falls for* the injected vendor notice, so these tests prove the harness layer
 holds even when the prompt layer fails. No network access is required.
 """
 import contextlib
@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 import agent
+from tests.fakes import FooledModel
 
 TICKET_ID = re.compile(r"^INC-\d{8}-[0-9A-F]{4}$")
 
@@ -22,8 +23,9 @@ class AgentLoopE2ETest(unittest.TestCase):
         tmpdir = tempfile.TemporaryDirectory()  # addCleanup (not enterContext) keeps Python 3.10 support
         self.addCleanup(tmpdir.cleanup)
         tmp = Path(tmpdir.name)
-        with mock.patch.object(agent, "OUT_DIR", tmp), contextlib.redirect_stdout(io.StringIO()):
-            final = agent.run(goal, role, auto_approve=True, mock=True)
+        with mock.patch.object(agent, "OUT_DIR", tmp), mock.patch.object(agent, "GUARD_MODEL", ""), \
+                contextlib.redirect_stdout(io.StringIO()):
+            final = agent.run(goal, role, auto_approve=True, llm=FooledModel())
         events = [json.loads(line) for line in (tmp / "audit.jsonl").read_text(encoding="utf-8").splitlines()]
         return events, tmp, final
 
