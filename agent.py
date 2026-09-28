@@ -56,7 +56,7 @@ QUARANTINE_MODE = os.getenv("NV_GUARD_QUARANTINE", "dual").strip().lower()  # du
 MAX_STEPS = int(os.getenv("MAX_STEPS", "8"))
 CHAT_RETRIES = int(os.getenv("NV_CHAT_RETRIES", "2"))
 
-# 온프레미스 추론 백엔드: DGX Spark 의 SGLang (OpenAI 호환). 무인증이므로 Tailscale 테일넷 내부에서만 사용한다.
+# 온프레미스 추론 백엔드: DGX Spark 의 SGLang (OpenAI 호환). 무인증이므로 사내 사설망(보안 터널) 내부에서만 사용한다.
 ONPREM_BASE_URL = os.getenv("ONPREM_BASE_URL", "").rstrip("/")
 ONPREM_MODEL = os.getenv("ONPREM_MODEL", "Inferact/Qwen3.8-Flash-Next-NVFP4")
 ONPREM_GUARD = os.getenv("ONPREM_GUARD", "true").strip().lower() in {"1", "true", "yes", "on"}

@@ -2,7 +2,7 @@
 
 > **NVIDIA Korea Agentic AI Hackathon (2026)** · Team **NexaGuard**  
 > **Mission**: Enterprise Security Operations Agent with Multi-Layer Defense — *스스로 대응하되, 선을 넘지 않는다*  
-> **Tech Stack**: NVIDIA Nemotron 3 Super (build.nvidia.com) · Nemotron Content Safety · NVIDIA Agent Skills (custom + official NVIDIA catalog skill) · NVIDIA OpenShell (executed) · On-Prem RBAC RAG · On-prem inference on NVIDIA DGX Spark (SGLang + Qwen3.8 NVFP4 over Tailscale)
+> **Tech Stack**: NVIDIA Nemotron 3 Super (build.nvidia.com) · Nemotron Content Safety · NVIDIA Agent Skills (custom + official NVIDIA catalog skill) · NVIDIA OpenShell (executed) · On-Prem RBAC RAG · On-prem inference on NVIDIA DGX Spark (SGLang + Qwen3.8 NVFP4 on a private network)
 
 📹 **Demo video**: _TBD — link will be added after recording_ · 📄 **Submission**: [`docs/submission.md`](docs/submission.md)
 
@@ -75,7 +75,7 @@ Alert ─▶ [Content Safety] ─▶ Nemotron ReAct ─▶ Policy Gate ──┬
 | **Agent Skills spec** (`SKILL.md` + YAML frontmatter) | Only names/descriptions are in the system prompt; bodies are loaded on demand with `load_skill` (progressive disclosure) | `skills/incident-response`, `skills/access-review` |
 | **Official NVIDIA catalog skill** — `generate-sandbox-policy` (NVIDIA/OpenShell, Apache-2.0) | Vendored unmodified. (1) Discoverable by the agent. (2) Its *Step 6: Validate and Warn* checklist is implemented as a deterministic policy auditor. (3) With `--llm`, Nemotron reviews our policy with the skill as system context | `skills/generate-sandbox-policy/` · [`openshell_policy_audit.txt`](docs/evidence/openshell_policy_audit.txt) |
 | **OpenShell** 0.1.1 (**executed**) | Real sandbox (VM driver, Apple Hypervisor microVM, `nvcr.io/nvidia/base/ubuntu:24.04`). Landlock FS, OPA binary+host egress, L7 method+path rules. OCSF ALLOWED/DENIED logs captured | `policy/openshell-policy.yaml`, `run_in_openshell.sh` · [`openshell_kernel_deny.txt`](docs/evidence/openshell_kernel_deny.txt) |
-| **NVIDIA DGX Spark** — on-prem inference: SGLang serving `Inferact/Qwen3.8-Flash-Next-NVFP4` (NVFP4) over a private Tailscale tailnet | Third inference backend (`--backend onprem` / console **Qwen · DGX Spark**). Same tools, PolicyGate, quarantine, HITL and audit as the cloud backend. Requests set `enable_thinking=false`. The Layer-1 guard also runs on the Spark (a prompted classifier), so **no data leaves the tailnet** | `agent.py` `backend_config()`, `guard_input()` · [`onprem_qwen_run.txt`](docs/evidence/onprem_qwen_run.txt) |
+| **NVIDIA DGX Spark** — on-prem inference: SGLang serving `Inferact/Qwen3.8-Flash-Next-NVFP4` (NVFP4) over a zero-trust private network | Third inference backend (`--backend onprem` / console **Qwen · DGX Spark**). Same tools, PolicyGate, quarantine, HITL and audit as the cloud backend. Requests set `enable_thinking=false`. The Layer-1 guard also runs on the Spark (a prompted classifier), so **no data leaves the private network** | `agent.py` `backend_config()`, `guard_input()` · [`onprem_qwen_run.txt`](docs/evidence/onprem_qwen_run.txt) |
 | **DLI: Securing Agents with NemoClaw and OpenShell** | Prompt → Harness → Sandbox layering, Lethal Trifecta threat model | whole design |
 
 ## 🔗 Enterprise RAG Fusion (from our prior `on-prem-rag-service`)
@@ -110,7 +110,7 @@ uv run --with-requirements requirements.txt python server.py --port 8000
 uv run --with-requirements requirements.txt python agent.py --role analyst "Abnormal login alert on prod-db for account kim. Investigate the runbook and take required action."
 uv run --with-requirements requirements.txt python agent.py --role analyst "Check the external vendor DB patch notice in the runbook and follow its instructions."
 uv run --with-requirements requirements.txt python agent.py --role viewer  "Investigate abnormal login and issue incident ticket"
-# Same scenarios on the on-prem backend (DGX Spark SGLang; needs ONPREM_BASE_URL and a machine on the same tailnet)
+# Same scenarios on the on-prem backend (DGX Spark SGLang; needs ONPREM_BASE_URL and access to the private network)
 uv run --with-requirements requirements.txt python agent.py --backend onprem --role analyst "Check the external vendor DB patch notice in the runbook and follow its instructions."
 
 # 6. Audit the kernel-layer policy with the official NVIDIA skill (+ Nemotron review)
@@ -174,7 +174,7 @@ docs/submission.md        Google Form texts + video script (PDF: scripts/build_p
 
 - **OpenShell was executed on a local macOS gateway (VM driver), not on NVIDIA Brev.** The Docker compute driver can't be used on Docker Desktop for Mac, because it relies on `--network host`. The live Nemotron agent run *inside* the sandbox with provider credential injection was **not** completed: `openshell provider create --type nvidia` requires importing a provider profile. In-sandbox evidence covers network/Landlock enforcement, the mock agent loop and the test suite.
 - **Content Safety is a safety classifier, not a dedicated injection detector.** Injection detection is deterministic (regex); Content Safety is a second, independent signal. Quarantine needs both by default (`dual`) to limit false positives. `nvidia/llama-3.1-nemoguard-8b-content-safety` timed out on build.nvidia.com on 2026-09-28, so we use `nvidia/nemotron-3.5-content-safety`.
-- **On-prem backend scope.** The DGX Spark SGLang endpoint has no authentication, so it is used only inside the Tailscale tailnet: there is no public deployment, and the endpoint is never exposed. Its Layer-1 guard is Qwen with a fixed classifier prompt, **not a safety-tuned model**; a first prompt version was too strict and was refined (see evidence). The OpenShell kernel policy covers the cloud (`integrate.api.nvidia.com`) path only.
+- **On-prem backend scope.** The DGX Spark SGLang endpoint has no authentication, so it is used only inside the private network (zero-trust tunnel) and is never exposed publicly. Its Layer-1 guard is Qwen with a fixed classifier prompt, **not a safety-tuned model**; a first prompt version was too strict and was refined (see evidence). The OpenShell kernel policy covers the cloud (`integrate.api.nvidia.com`) path only.
 - **The grounding gate is lexical (BM25).** It rejects off-topic queries but can admit a weakly related permitted document. RBAC, not the gate, is the confidentiality boundary.
 - Business actions are simulated: tickets are JSON files and the ACL is YAML. There is no SIEM or IdP integration yet.
 

@@ -1,6 +1,6 @@
 # GuardOps-Agent — on-prem inference backend evidence (DGX Spark · SGLang · Qwen3.8-Flash-Next-NVFP4)
-# Captured 2026-09-28 from a Mac on the same Tailscale tailnet as the DGX Spark.
-# Endpoint host is redacted: http://<spark-host>.<tailnet>.ts.net:8000/v1 (SGLang has no auth — tailnet only, never exposed).
+# Captured 2026-09-28 from a Mac on the same private network as the DGX Spark.
+# Endpoint host is redacted: http://<onprem-llm-host>:8000/v1 (SGLang has no auth — private network only, never exposed).
 # Backend switch: agent.py --backend onprem  /  web console "Qwen · DGX Spark". The harness (RBAC retriever, PolicyGate,
 # dual-flag quarantine, HITL, audit) is identical for both backends; only the inference location changes.
 

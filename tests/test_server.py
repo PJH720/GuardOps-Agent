@@ -125,8 +125,8 @@ class DashboardWebSocketTest(unittest.TestCase):
             self.assertEqual(ws.receive_json()["type"], "done")
 
     def test_status_lists_backends_without_leaking_onprem_host(self):
-        with mock.patch.object(server, "probe_onprem", return_value={"available": True, "reason": "reachable over tailnet"}), \
-             mock.patch.object(agent, "ONPREM_BASE_URL", "http://secret-host.example.ts.net:8000/v1"):
+        with mock.patch.object(server, "probe_onprem", return_value={"available": True, "reason": "reachable on the private network"}), \
+             mock.patch.object(agent, "ONPREM_BASE_URL", "http://secret-host.internal:8000/v1"):
             status = self.client.get("/api/status").json()
         backends = {b["id"]: b for b in status["backends"]}
         self.assertEqual(set(backends), {"nvidia", "onprem", "mock"})

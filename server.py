@@ -66,7 +66,7 @@ def probe_onprem() -> dict[str, Any]:
         r.raise_for_status()
         served = [m.get("id") for m in r.json().get("data", [])]
         ok = agent.ONPREM_MODEL in served
-        result = {"available": ok, "reason": "reachable over tailnet" if ok else "configured model is not served"}
+        result = {"available": ok, "reason": "reachable on the private network" if ok else "configured model is not served"}
     except (requests.RequestException, ValueError) as e:
         result = {"available": False, "reason": f"unreachable ({type(e).__name__})"}
     _onprem_probe.update(at=now, result=result)
@@ -82,7 +82,7 @@ def backends_status() -> list[dict[str, Any]]:
          "reason": "API key configured" if key else "NVIDIA_API_KEY not configured"},
         {"id": "onprem", "label": "Qwen · DGX Spark", "model": agent.ONPREM_MODEL,
          "guard": agent.ONPREM_GUARD_LABEL if agent.ONPREM_GUARD else None,
-         "location": "on-prem (SGLang over Tailscale)", **probe_onprem()},
+         "location": "on-prem (SGLang, private network)", **probe_onprem()},
         {"id": "mock", "label": "Mock replay", "model": "MockLLM (fooled-model replay)", "guard": None,
          "location": "offline", "available": True, "reason": "deterministic replay, no network"},
     ]
