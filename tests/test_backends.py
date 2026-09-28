@@ -8,7 +8,7 @@ from unittest import mock
 
 import agent
 
-ONPREM_URL = "http://spark.example.ts.net:8000/v1"
+ONPREM_URL = "http://onprem-llm.internal:8000/v1"
 
 
 def fake_response(content="ok", status=200):
@@ -73,7 +73,7 @@ class BackendTest(unittest.TestCase):
     def test_onprem_guard_error_is_audited_with_fail_mode(self):
         agent._backend = "onprem"
         with mock.patch.object(agent, "ONPREM_GUARD", True), mock.patch.object(agent, "GUARD_FAIL_OPEN", False), \
-             mock.patch.object(agent.requests, "post", side_effect=agent.requests.ConnectionError("tailnet down")):
+             mock.patch.object(agent.requests, "post", side_effect=agent.requests.ConnectionError("private network down")):
             ok, detail = agent.guard_input("hello")
         self.assertFalse(ok)
         call = agent.audit.call_args

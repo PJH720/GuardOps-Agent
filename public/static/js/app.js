@@ -229,7 +229,7 @@ const handlers = {
           <div class="goal-meta">
             <span class="chip">${esc(p.role)}</span>
             <span class="chip ${p.mock ? '' : 'chip-accent'}">${p.mock ? 'mock replay' : esc(short(p.model))}</span>
-            ${e.backend === 'onprem' ? '<span class="chip chip-info">on-prem · DGX Spark · data stays in tailnet</span>' : ''}
+            ${e.backend === 'onprem' ? '<span class="chip chip-info">on-prem · DGX Spark · data stays on the private network</span>' : ''}
             <span class="chip">clearance [${esc(p.doc_clearance.join(', '))}]</span>
             ${p.excluded_docs.length ? `<span class="chip chip-danger">${icon('eye-off')} ${esc(p.excluded_docs.join(', '))} excluded</span>` : ''}
             ${p.auto_approve ? '<span class="chip chip-warn">auto-approve</span>' : '<span class="chip">human approval on</span>'}
