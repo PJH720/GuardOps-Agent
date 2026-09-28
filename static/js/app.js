@@ -9,7 +9,8 @@ const SCENARIO_TONE = { 1: 'accent', 2: 'danger', 3: 'info' };
 
 const state = {
   role: 'analyst',
-  mode: 'live',
+  backend: 'nvidia',     // nvidia | onprem | mock — server re-validates
+  backends: [],
   running: false,
   ws: null,
   sessionId: null,
@@ -132,7 +133,7 @@ function stepCard(step) {
     <article class="step is-open" data-live="true" data-step="${step}">
       <button class="step-head" type="button" aria-expanded="true">
         <span class="step-idx">STEP ${String(step).padStart(2, '0')}</span>
-        <span class="step-tools"><span class="thinking"><span class="spinner"></span>Nemotron reasoning…</span></span>
+        <span class="step-tools"><span class="thinking"><span class="spinner"></span>${esc(state.modelLabel || 'model')} reasoning…</span></span>
         <span class="step-summary"></span>
         <span class="step-verdict"></span>
         <span class="chev">${icon('chevron')}</span>
@@ -210,7 +211,8 @@ const handlers = {
     state.sessionId = e.session_id;
     $('#session-id').textContent = e.session_id || '—';
     $('#s-role').textContent = p.role;
-    $('#s-mode').textContent = p.mock ? 'Mock replay' : 'Live · Nemotron';
+    const be = state.backends.find((b) => b.id === e.backend);
+    $('#s-mode').textContent = be ? be.label : (p.mock ? 'Mock replay' : e.backend);
     $('#s-clearance').textContent = `[${p.doc_clearance.join(', ')}]`;
     $('#s-reachable').textContent = `${p.reachable_docs.length} docs`;
     $('#s-excluded').innerHTML = p.excluded_docs.length
@@ -226,7 +228,8 @@ const handlers = {
           <div class="goal-text" title="${esc(p.goal)}">${esc(p.goal)}</div>
           <div class="goal-meta">
             <span class="chip">${esc(p.role)}</span>
-            <span class="chip ${p.mock ? '' : 'chip-accent'}">${p.mock ? 'mock replay' : esc(p.model)}</span>
+            <span class="chip ${p.mock ? '' : 'chip-accent'}">${p.mock ? 'mock replay' : esc(short(p.model))}</span>
+            ${e.backend === 'onprem' ? '<span class="chip chip-info">on-prem · DGX Spark · data stays in tailnet</span>' : ''}
             <span class="chip">clearance [${esc(p.doc_clearance.join(', '))}]</span>
             ${p.excluded_docs.length ? `<span class="chip chip-danger">${icon('eye-off')} ${esc(p.excluded_docs.join(', '))} excluded</span>` : ''}
             ${p.auto_approve ? '<span class="chip chip-warn">auto-approve</span>' : '<span class="chip">human approval on</span>'}
@@ -252,7 +255,7 @@ const handlers = {
   },
 
   step_started(e) {
-    setStage('reasoning', 'active', `step ${e.step}`);
+    setStage('reasoning', 'active', `step ${e.step} · ${state.modelLabel || ''}`);
     stepCard(e.step);
     $('#run-status').textContent = `Running · step ${e.step}`;
   },
@@ -540,7 +543,7 @@ function startRun(goal, role, autoApprove) {
   const ws = new WebSocket(`${proto}//${location.host}/ws/agent`);
   state.ws = ws;
   let finished = false;
-  ws.onopen = () => ws.send(JSON.stringify({ goal, role, auto_approve: autoApprove, mock: state.mode === 'mock' }));
+  ws.onopen = () => ws.send(JSON.stringify({ goal, role, auto_approve: autoApprove, backend: state.backend }));
   ws.onmessage = (msg) => {
     const e = JSON.parse(msg.data);
     if (e.type === 'done') { finished = true; finish('done'); return; }
@@ -578,14 +581,23 @@ function setRole(role) {
   $('#s-role').textContent = role;
 }
 
-function setMode(mode) {
-  state.mode = mode;
-  document.querySelectorAll('.seg-mode .seg-btn').forEach((b) => {
-    const on = b.dataset.mode === mode;
-    b.classList.toggle('is-on', on);
-    b.setAttribute('aria-checked', String(on));
+function short(name) { return String(name || '').replace(/^(nvidia|Inferact)\//, ''); }
+
+function setBackend(id) {
+  const b = state.backends.find((x) => x.id === id);
+  if (b && !b.available) return;
+  state.backend = id;
+  document.querySelectorAll('.seg-mode .seg-btn').forEach((btn) => {
+    const on = btn.dataset.backend === id;
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-checked', String(on));
   });
-  $('#s-mode').textContent = mode === 'mock' ? 'Mock replay' : 'Live · Nemotron';
+  if (!b) return;
+  $('#s-mode').textContent = b.label;
+  $('#model-name').textContent = short(b.model);
+  state.modelLabel = id === 'mock' ? 'Mock' : id === 'onprem' ? 'Qwen' : 'Nemotron';
+  $('#model-chip').title = `${b.label} — ${b.location}`;
+  $('#l1-engine').textContent = b.guard ? short(b.guard) : (id === 'mock' ? 'mock: guard skipped' : 'guard disabled');
 }
 
 function shortTitle(t) {
@@ -614,12 +626,15 @@ async function loadScenarios() {
 async function loadStatus() {
   try {
     const s = await (await fetch('/api/status')).json();
-    $('#model-name').textContent = s.model.replace(/^nvidia\//, '');
-    $('#l1-engine').textContent = s.guard_model ? s.guard_model.replace(/^nvidia\//, '') : 'guard disabled';
-    if (!s.api_key_configured) {
-      setMode('mock');
-      $('#model-chip').title = 'NVIDIA_API_KEY not configured — live mode unavailable';
-    }
+    state.backends = s.backends || [];
+    state.backends.forEach((b) => {
+      const btn = document.querySelector(`.seg-mode [data-backend="${b.id}"]`);
+      if (!btn) return;
+      btn.dataset.unavailable = String(!b.available);
+      btn.title = `${b.label} · ${b.location} — ${b.available ? short(b.model) : `unavailable: ${b.reason}`}`;
+    });
+    const current = state.backends.find((b) => b.id === state.backend);
+    setBackend(current?.available ? state.backend : (state.backends.find((b) => b.available)?.id || 'mock'));
   } catch { /* status is informational */ }
 }
 
@@ -627,7 +642,7 @@ function init() {
   hydrateIcons();
   $('#role-seg').innerHTML = ROLES.map((r) => `<button class="seg-btn${r === state.role ? ' is-on' : ''}" data-role="${r}" role="radio" aria-checked="${r === state.role}">${r}</button>`).join('');
   $('#role-seg').addEventListener('click', (ev) => { const b = ev.target.closest('.seg-btn'); if (b && !state.running) setRole(b.dataset.role); });
-  document.querySelector('.seg-mode').addEventListener('click', (ev) => { const b = ev.target.closest('.seg-btn'); if (b && !state.running) setMode(b.dataset.mode); });
+  document.querySelector('.seg-mode').addEventListener('click', (ev) => { const b = ev.target.closest('.seg-btn'); if (b && !state.running) setBackend(b.dataset.backend); });
   $('#goal-form').addEventListener('submit', (ev) => {
     ev.preventDefault();
     startRun($('#goal-input').value.trim(), state.role, $('#auto-approve').checked);

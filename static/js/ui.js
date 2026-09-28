@@ -84,7 +84,7 @@ export function jsonHtml(value) {
 export function sanitizeMarkdown(md) {
   // 보고서의 [판단 근거] 류 머리표를 섹션 제목으로 승격한 뒤 렌더링 → DOMPurify 로 정화
   const sectioned = String(md || '').replace(
-    /^\s*\**\s*\[(판단 근거|수행한 조치|차단\/거부된 시도|다음 권장 조치)\]\s*\**\s*/gm,
+    /^\s*\**\s*\[(판단 근거|수행한 조치|차단\s*[/·・,]\s*거부된 시도|다음 권장 조치)\]\s*\**\s*/gm,
     (_, h) => `\n#### ${h}\n\n`,
   );
   const html = window.marked ? window.marked.parse(sectioned) : esc(sectioned);

@@ -30,9 +30,10 @@
 
     <div class="controls">
       <div class="seg" role="radiogroup" aria-label="Role" id="role-seg"></div>
-      <div class="seg seg-mode" role="radiogroup" aria-label="Run mode">
-        <button class="seg-btn is-on" data-mode="live" role="radio" aria-checked="true">Live</button>
-        <button class="seg-btn" data-mode="mock" role="radio" aria-checked="false">Mock replay</button>
+      <div class="seg seg-mode" role="radiogroup" aria-label="Inference backend">
+        <button class="seg-btn is-on" data-backend="nvidia" role="radio" aria-checked="true" title="build.nvidia.com · Nemotron 3 Super">Nemotron · NVIDIA</button>
+        <button class="seg-btn" data-backend="onprem" role="radio" aria-checked="false" title="DGX Spark · SGLang · Tailscale">Qwen · DGX Spark</button>
+        <button class="seg-btn" data-backend="mock" role="radio" aria-checked="false" title="Offline replay of a fooled model">Mock</button>
       </div>
       <label class="switch" title="create_incident_ticket 을 사람 승인 없이 실행">
         <input type="checkbox" id="auto-approve">
@@ -112,7 +113,7 @@
             <li data-stage="goal"><span class="node" data-icon="user"></span><span class="p-label">User goal</span><span class="p-sub" id="ps-goal">Awaiting input</span></li>
             <li data-stage="screening"><span class="node" data-icon="shield"></span><span class="p-label">Input screening</span><span class="p-sub" id="ps-screening">Content Safety</span></li>
             <li data-stage="grounding"><span class="node" data-icon="search"></span><span class="p-label">RBAC grounding</span><span class="p-sub" id="ps-grounding">Pre-filtered retriever</span></li>
-            <li data-stage="reasoning"><span class="node" data-icon="cpu"></span><span class="p-label">Nemotron reasoning</span><span class="p-sub" id="ps-reasoning">ReAct</span></li>
+            <li data-stage="reasoning"><span class="node" data-icon="cpu"></span><span class="p-label">LLM reasoning</span><span class="p-sub" id="ps-reasoning">ReAct</span></li>
             <li data-stage="enforcement"><span class="node" data-icon="lock"></span><span class="p-label">Policy enforcement</span><span class="p-sub" id="ps-enforcement">PolicyGate</span></li>
             <li data-stage="action"><span class="node" data-icon="zap"></span><span class="p-label">Action</span><span class="p-sub" id="ps-action">Tools · tickets</span></li>
           </ol>
