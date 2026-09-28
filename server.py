@@ -14,6 +14,7 @@ import asyncio
 import json
 import os
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+import requests
 import uvicorn
 import yaml
 
@@ -45,6 +47,45 @@ SANDBOX_SKILL = "generate-sandbox-policy"
 
 # agent 모듈의 _retriever/_offline 은 전역이다 → 한 번에 한 실행만 허용해야 역할별 RBAC 바인딩이 섞이지 않는다.
 RUN_LOCK = asyncio.Lock()
+
+
+WS_BACKENDS = ("nvidia", "onprem", "mock")
+ONPREM_PROBE_TTL = 30.0
+_onprem_probe: dict[str, Any] = {"at": 0.0, "result": None}
+
+
+def probe_onprem() -> dict[str, Any]:
+    """DGX Spark SGLang 도달성: GET /v1/models (2초 타임아웃, 30초 캐시). 무인증 엔드포인트라 호스트명은 응답에 넣지 않는다."""
+    if not agent.ONPREM_BASE_URL:
+        return {"available": False, "reason": "ONPREM_BASE_URL not configured"}
+    now = time.monotonic()
+    if _onprem_probe["result"] is not None and now - _onprem_probe["at"] < ONPREM_PROBE_TTL:
+        return _onprem_probe["result"]
+    try:
+        r = requests.get(f"{agent.ONPREM_BASE_URL}/models", timeout=2)
+        r.raise_for_status()
+        served = [m.get("id") for m in r.json().get("data", [])]
+        ok = agent.ONPREM_MODEL in served
+        result = {"available": ok, "reason": "reachable over tailnet" if ok else "configured model is not served"}
+    except (requests.RequestException, ValueError) as e:
+        result = {"available": False, "reason": f"unreachable ({type(e).__name__})"}
+    _onprem_probe.update(at=now, result=result)
+    return result
+
+
+def backends_status() -> list[dict[str, Any]]:
+    """콘솔의 추론 백엔드 선택지. 추론 위치만 다르고 PolicyGate·격리·감사는 모두 동일하게 적용된다."""
+    key = bool(os.getenv("NVIDIA_API_KEY"))
+    return [
+        {"id": "nvidia", "label": "Nemotron · NVIDIA API", "model": agent.MODEL, "guard": agent.GUARD_MODEL or None,
+         "location": "cloud (build.nvidia.com)", "available": key,
+         "reason": "API key configured" if key else "NVIDIA_API_KEY not configured"},
+        {"id": "onprem", "label": "Qwen · DGX Spark", "model": agent.ONPREM_MODEL,
+         "guard": agent.ONPREM_GUARD_LABEL if agent.ONPREM_GUARD else None,
+         "location": "on-prem (SGLang over Tailscale)", **probe_onprem()},
+        {"id": "mock", "label": "Mock replay", "model": "MockLLM (fooled-model replay)", "guard": None,
+         "location": "offline", "available": True, "reason": "deterministic replay, no network"},
+    ]
 
 
 def _read_evidence(name: str) -> str:
@@ -97,10 +138,12 @@ def live_policy_audit() -> dict[str, Any]:
 async def get_status() -> dict[str, Any]:
     app_cfg = yaml.safe_load(agent.APP_POLICY.read_text(encoding="utf-8"))
     policy = live_policy_audit()
+    backends = await asyncio.to_thread(backends_status)
 
     return {
         "status": "online",
         "api_key_configured": bool(os.getenv("NVIDIA_API_KEY")),  # 키 일부도 노출하지 않는다
+        "backends": backends,
         "base_url": agent.BASE_URL,
         "model": agent.MODEL,
         "guard_model": agent.GUARD_MODEL or None,
@@ -243,12 +286,14 @@ def _advance(gen, reply):
 
 
 async def _run_session(websocket: WebSocket, session_id: str, goal: str, role: str,
-                       auto_approve: bool, mock: bool) -> None:
+                       auto_approve: bool, backend: str) -> None:
     """헤드리스 엔진(guardops.engine.run_agent)을 구동하고 구조화 이벤트를 그대로 전달한다. 판정 로직은 여기 없다."""
     def audit(event: str, **kw) -> None:
-        agent.audit(event, **{"channel": "web", "web_session": session_id, "role": role, **kw})
+        agent.audit(event, **{"channel": "web", "web_session": session_id, "role": role, "backend": backend, **kw})
 
-    ctx = await asyncio.to_thread(agent.build_context, role, auto_approve, mock, audit)
+    mock = backend == "mock"
+    ctx = await asyncio.to_thread(agent.build_context, role, auto_approve, mock, audit,
+                                  "nvidia" if mock else backend)
     gen = run_agent(ctx, goal)
     reply = None
     while True:
@@ -256,7 +301,7 @@ async def _run_session(websocket: WebSocket, session_id: str, goal: str, role: s
         if event is None:
             return
         reply = None
-        await websocket.send_json({"session_id": session_id, **event.to_dict()})
+        await websocket.send_json({"session_id": session_id, "backend": backend, **event.to_dict()})
         if event.type == "approval_required":
             reply = await _await_hitl(websocket)
 
@@ -273,17 +318,24 @@ async def websocket_agent_endpoint(websocket: WebSocket) -> None:
         goal = str(init.get("goal", "")).strip()
         role = str(init.get("role", "analyst"))
         auto_approve = bool(init.get("auto_approve", False))
-        mock = bool(init.get("mock", False))
+        # backend: nvidia | onprem | mock (구 클라이언트의 mock: true 도 호환)
+        backend = str(init.get("backend") or ("mock" if init.get("mock") else "nvidia"))
         roles = yaml.safe_load(agent.APP_POLICY.read_text(encoding="utf-8")).get("roles", {})
         if not goal:
             await websocket.send_json({"type": "error", "message": "목표(Goal)가 입력되지 않았습니다."})
         elif role not in roles:
             await websocket.send_json({"type": "error", "message": f"알 수 없는 역할 '{role}'. 가능: {list(roles)}"})
+        elif backend not in WS_BACKENDS:
+            await websocket.send_json({"type": "error", "message": f"알 수 없는 백엔드 '{backend}'. 가능: {list(WS_BACKENDS)}"})
+        elif backend == "onprem" and not agent.ONPREM_BASE_URL:
+            await websocket.send_json({"type": "error", "message": "ONPREM_BASE_URL 이 설정되지 않았습니다 (.env)."})
+        elif backend == "nvidia" and not os.getenv("NVIDIA_API_KEY"):
+            await websocket.send_json({"type": "error", "message": "NVIDIA_API_KEY 가 설정되지 않았습니다 (.env)."})
         elif RUN_LOCK.locked():
             await websocket.send_json({"type": "error", "message": "다른 실행이 진행 중입니다. 완료 후 다시 시도하세요."})
         else:
             async with RUN_LOCK:
-                await _run_session(websocket, session_id, goal, role, auto_approve, mock)
+                await _run_session(websocket, session_id, goal, role, auto_approve, backend)
         await websocket.send_json({"type": "done"})
         await websocket.close()
     except WebSocketDisconnect:

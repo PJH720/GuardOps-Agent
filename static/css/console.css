@@ -131,7 +131,9 @@ kbd {
 .seg-btn:hover { color: var(--text); }
 .seg-btn:disabled { cursor: not-allowed; }
 .seg-btn.is-on { background: var(--card-3); color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); }
-.seg-mode .seg-btn.is-on[data-mode="live"] { color: var(--accent); }
+.seg-mode .seg-btn.is-on[data-backend="nvidia"] { color: var(--accent); }
+.seg-mode .seg-btn.is-on[data-backend="onprem"] { color: var(--info); }
+.seg-mode .seg-btn[data-unavailable="true"] { opacity: 0.4; text-decoration: line-through; cursor: not-allowed; }
 
 .switch { display: inline-flex; align-items: center; gap: var(--s-2); cursor: pointer; user-select: none; }
 .switch input { position: absolute; opacity: 0; pointer-events: none; }

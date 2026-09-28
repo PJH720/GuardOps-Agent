@@ -116,6 +116,33 @@ class DashboardWebSocketTest(unittest.TestCase):
             self.assertEqual(ws.receive_json()["type"], "error")
             self.assertEqual(ws.receive_json()["type"], "done")
 
+    def test_unknown_backend_is_rejected_cleanly(self):
+        with self.client.websocket_connect("/ws/agent") as ws:
+            ws.send_json({"goal": GOAL, "role": "analyst", "backend": "somewhere-else"})
+            err = ws.receive_json()
+            self.assertEqual(err["type"], "error")
+            self.assertIn("백엔드", err["message"])
+            self.assertEqual(ws.receive_json()["type"], "done")
+
+    def test_status_lists_backends_without_leaking_onprem_host(self):
+        with mock.patch.object(server, "probe_onprem", return_value={"available": True, "reason": "reachable over tailnet"}), \
+             mock.patch.object(agent, "ONPREM_BASE_URL", "http://secret-host.example.ts.net:8000/v1"):
+            status = self.client.get("/api/status").json()
+        backends = {b["id"]: b for b in status["backends"]}
+        self.assertEqual(set(backends), {"nvidia", "onprem", "mock"})
+        self.assertTrue(backends["onprem"]["available"])
+        self.assertEqual(backends["onprem"]["model"], agent.ONPREM_MODEL)
+        self.assertNotIn("secret-host", str(status))  # 무인증 온프레미스 엔드포인트 주소는 노출하지 않는다
+
+    def test_mock_backend_events_are_tagged(self):
+        msgs = []
+        with self.client.websocket_connect("/ws/agent") as ws:
+            ws.send_json({"goal": GOAL, "role": "viewer", "backend": "mock"})
+            while (m := ws.receive_json())["type"] != "done":
+                msgs.append(m)
+        self.assertEqual(self.of(msgs, "error"), [])
+        self.assertEqual({m.get("backend") for m in msgs}, {"mock"})
+
     def test_cross_origin_websocket_is_refused(self):
         with self.assertRaises(WebSocketDisconnect):
             with self.client.websocket_connect("/ws/agent", headers={"origin": "https://evil.example"}) as ws:
