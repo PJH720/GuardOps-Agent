@@ -4,7 +4,7 @@
 > **Mission**: Enterprise Security Operations Agent with Multi-Layer Defense — *스스로 대응하되, 선을 넘지 않는다*  
 > **Tech Stack**: NVIDIA Nemotron 3 Super (build.nvidia.com) · Nemotron Content Safety · NVIDIA Agent Skills (custom + official NVIDIA catalog skill) · NVIDIA OpenShell (executed) · On-Prem RBAC RAG · On-prem inference on NVIDIA DGX Spark (SGLang + Qwen3.8 NVFP4 over Local Net)
 
-🌐 **Live console**: https://guardops-agent.vercel.app · 📹 **Demo video**: _TBD — link will be added after recording_
+🌐 **Live console**: https://guardops-agent.vercel.app · 📹 **Demo video**: https://youtu.be/mS2t0K2qe7c
 
 ---
 

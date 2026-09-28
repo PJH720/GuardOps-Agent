@@ -10,6 +10,9 @@
 # AI Agent instruction / workspace rule files
 AGENT.md
 AGENT.*
+!agent.py
+AGENTS.md
+**/AGENTS.md
 CLAUDE.md
 CLAUDE.*
 .cursorrules
