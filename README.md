@@ -2,7 +2,7 @@
 
 > **NVIDIA Korea Agentic AI Hackathon (2026)** · Team **NexaGuard**  
 > **Mission**: Enterprise Security Operations Agent with Multi-Layer Defense — *스스로 대응하되, 선을 넘지 않는다*  
-> **Tech Stack**: NVIDIA Nemotron 3 Super (build.nvidia.com) · Nemotron Content Safety · NVIDIA Agent Skills (custom + official NVIDIA catalog skill) · NVIDIA OpenShell (executed) · On-Prem RBAC RAG · On-prem inference on NVIDIA DGX Spark (SGLang + Qwen3.8 NVFP4 over Tailscale)
+> **Tech Stack**: NVIDIA Nemotron 3 Super (build.nvidia.com) · Nemotron Content Safety · NVIDIA Agent Skills (custom + official NVIDIA catalog skill) · NVIDIA OpenShell (executed) · On-Prem RBAC RAG · On-prem inference on NVIDIA DGX Spark (SGLang + Qwen3.8 NVFP4 over Local Net)
 
 📹 **Demo video**: _TBD — link will be added after recording_ · 📄 **Submission**: [`docs/submission.md`](docs/submission.md)
 
