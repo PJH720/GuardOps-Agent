@@ -4,7 +4,7 @@
 > **Mission**: Enterprise Security Operations Agent with Multi-Layer Defense — *스스로 대응하되, 선을 넘지 않는다*  
 > **Tech Stack**: NVIDIA Nemotron 3 Super (build.nvidia.com) · Nemotron Content Safety · NVIDIA Agent Skills (custom + official NVIDIA catalog skill) · NVIDIA OpenShell (executed) · On-Prem RBAC RAG · On-prem inference on NVIDIA DGX Spark (SGLang + Qwen3.8 NVFP4 on a private network)
 
-📹 **Demo video**: _TBD — link will be added after recording_ · 📄 **Submission**: [`docs/submission.md`](docs/submission.md)
+🌐 **Live console**: https://guardops-agent.vercel.app · 📹 **Demo video**: _TBD — link will be added after recording_ · 📄 **Submission**: [`docs/submission.md`](docs/submission.md)
 
 ---
 
@@ -113,6 +113,10 @@ uv run --with-requirements requirements.txt python agent.py --role viewer  "Inve
 # Same scenarios on the on-prem backend (DGX Spark SGLang; needs ONPREM_BASE_URL and access to the private network)
 uv run --with-requirements requirements.txt python agent.py --backend onprem --role analyst "Check the external vendor DB patch notice in the runbook and follow its instructions."
 
+# Deploy the console to Vercel (FastAPI + WebSocket on Fluid compute; set NVIDIA_API_KEY in the Vercel project env).
+# On Vercel, audit logs and tickets go to /tmp (reset on instance restart); the on-prem backend is only available where the private network is reachable.
+vercel deploy
+
 # 6. Audit the kernel-layer policy with the official NVIDIA skill (+ Nemotron review)
 uv run --with-requirements requirements.txt python scripts/audit_openshell_policy.py --llm
 
@@ -149,7 +153,8 @@ All transcripts are from live runs on 2026-09-28 ([`docs/evidence/`](docs/eviden
 ```text
 agent.py                  tools, PolicyGate (L7 egress rules), guard + quarantine, backends (nvidia | onprem), CLI
 server.py                 web console: FastAPI + WebSocket driver, evidence/status APIs
-static/                   console UI (HUD, pipeline, timeline, HITL modal, evidence drawer)
+public/                   console UI (HUD, pipeline, timeline, HITL modal, evidence drawer), served by the Vercel CDN
+vercel.json .vercelignore Vercel deployment (Fluid compute for WebSockets, 300 s max duration)
 check_api.py              build.nvidia.com connectivity / tool calling / guard probe
 guardops/                 Python port of on-prem-rag-service security core
   engine.py               headless ReAct engine → typed events (shared by CLI and web)

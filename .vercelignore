@@ -1,0 +1,19 @@
+# Never upload secrets, the reference project (contains its own .env.local and node_modules) or agent workspaces
+.env
+.env.*
+!.env.example
+ref/
+.omc/
+.serena/
+.remember/
+.claude/
+# Local-only artifacts
+out/
+tests/
+sandbox/
+scripts/
+docs/*.pdf
+**/__pycache__/
+.venv/
+*.log
+.DS_Store

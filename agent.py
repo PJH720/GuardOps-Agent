@@ -44,7 +44,8 @@ load_dotenv(ROOT / ".env")  # 키 값은 절대 출력/로그하지 않는다
 
 SKILLS_DIR = ROOT / "skills"
 KNOWLEDGE_DIR = ROOT / "knowledge"
-OUT_DIR = ROOT / "out"
+# 감사 로그·티켓 위치. Vercel 함수는 /tmp 외에는 읽기 전용이므로 그곳에 쓴다(인스턴스 재시작 시 초기화됨).
+OUT_DIR = Path(os.getenv("GUARDOPS_OUT_DIR") or ("/tmp/guardops-out" if os.getenv("VERCEL") else ROOT / "out"))
 APP_POLICY = ROOT / "policy" / "app_policy.yaml"
 
 BASE_URL = os.getenv("NV_BASE_URL", "https://integrate.api.nvidia.com/v1")
@@ -63,7 +64,7 @@ ONPREM_GUARD = os.getenv("ONPREM_GUARD", "true").strip().lower() in {"1", "true"
 ONPREM_GUARD_LABEL = "qwen3.8-on-prem classifier (prompted, not a safety-tuned model)"
 BACKEND_IDS = ("nvidia", "onprem")
 
-OUT_DIR.mkdir(exist_ok=True)
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 SESSION_ID = uuid.uuid4().hex[:8]
 
 

@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import requests
 import uvicorn
@@ -38,8 +38,8 @@ from guardops.policy_audit import audit_policy, format_report  # noqa: E402
 # CORS 미들웨어를 두지 않는다: UI 는 같은 오리진에서만 제공되며, /ws/agent 는 Origin 검사로 교차 사이트 접속을 막는다.
 app = FastAPI(title="GuardOps-Agent Web SOC Dashboard", version="1.0.0")
 
-STATIC_DIR = ROOT / "static"
-STATIC_DIR.mkdir(exist_ok=True)
+# 콘솔 정적 파일은 public/ 에 둔다: Vercel 은 public/ 을 CDN 으로 직접 서빙하고, 로컬에서는 아래 mount 가 대신한다.
+PUBLIC_DIR = ROOT / "public"
 EVIDENCE_DIR = ROOT / "docs" / "evidence"
 OPENSHELL_POLICY = ROOT / "policy" / "openshell-policy.yaml"
 CREDENTIALED_HOSTS = frozenset({"integrate.api.nvidia.com"})  # scripts/audit_openshell_policy.py 와 동일
@@ -350,14 +350,17 @@ async def websocket_agent_endpoint(websocket: WebSocket) -> None:
 
 
 # Serve index.html at root
-@app.get("/")
-async def serve_index() -> FileResponse:
-    index_path = STATIC_DIR / "index.html"
-    return FileResponse(index_path)
+@app.get("/", response_model=None)
+async def serve_index() -> FileResponse | RedirectResponse:
+    index_path = PUBLIC_DIR / "index.html"
+    if index_path.is_file():
+        return FileResponse(index_path)
+    return RedirectResponse("/index.html", status_code=307)  # Vercel: public/ 은 함수 번들이 아닌 CDN 에 있다
 
 
-# Mount static files
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# 로컬 실행용 정적 파일 mount. Vercel 에서는 public/static/** 을 CDN 이 서빙하므로 디렉터리가 없을 때 건너뛴다.
+if (PUBLIC_DIR / "static").is_dir():
+    app.mount("/static", StaticFiles(directory=PUBLIC_DIR / "static"), name="static")
 
 
 def main():
